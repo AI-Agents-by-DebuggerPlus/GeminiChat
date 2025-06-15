@@ -11,19 +11,17 @@ namespace GeminiChat.Logging
 
         public FileLogger()
         {
-            // Определяем путь к папке логов
-            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string logFolderPath = Path.Combine(appDataPath, "GeminiChatWpf", "Logs");
+            // *** ИЗМЕНЕНИЕ ЗДЕСЬ ***
+            // Указываем новый, жестко заданный путь к папке логов.
+            string logFolderPath = @"d:\Programming\Debug\Logs\GeminiChat\";
 
-            // Убедимся, что директория существует
+            // Убедимся, что директория существует. Если нет - создаем ее.
             Directory.CreateDirectory(logFolderPath);
 
-            // Будем использовать один и тот же файл для всех сессий
+            // Имя файла остается прежним.
             _logFilePath = Path.Combine(logFolderPath, "session_log.txt");
 
-            // *** ИЗМЕНЕНИЕ ЗДЕСЬ ***
-            // Убираем очистку файла и вместо этого добавляем разделитель
-            // для новой сессии, чтобы сделать лог более читаемым.
+            // Добавляем разделитель для новой сессии.
             WriteToFile("\n" +
                         "====================================================\n" +
                         $"          NEW SESSION STARTED: {DateTime.Now:G}\n" +
@@ -48,6 +46,7 @@ namespace GeminiChat.Logging
         {
             lock (_lock)
             {
+                // Используем File.AppendAllText, чтобы дописывать в конец файла.
                 File.AppendAllText(_logFilePath, text + Environment.NewLine);
             }
         }

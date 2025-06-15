@@ -22,9 +22,39 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+
                 <TextBlock Grid.Column="0" Text="Gemini" FontSize="22" FontWeight="SemiBold" Foreground="#3C4043" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Command="{Binding OpenSettingsCommand}" Width="32" Height="32" ToolTip="Настройки">
+
+                <!-- Кнопка "Новый чат" -->
+                <Button Grid.Column="1" Command="{Binding NewChatCommand}" Width="32" Height="32" ToolTip="Новый чат" Margin="0,0,5,0">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="16">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#EFEFEF"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <!-- Иконка "плюс" -->
+                    <Path Data="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" Fill="#5F6368" Width="20" Height="20" Stretch="Uniform"/>
+                </Button>
+
+                <!-- Кнопка настроек -->
+                <Button Grid.Column="2" Command="{Binding OpenSettingsCommand}" Width="32" Height="32" ToolTip="Настройки">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="Transparent"/>
@@ -105,7 +135,6 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- ИСПРАВЛЕНИЕ 2: Добавляем x:Name -->
                 <TextBox Grid.Column="0"
                          x:Name="UserInputTextBox"
                          Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}"

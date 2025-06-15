@@ -7,8 +7,9 @@ namespace GeminiChat.Core
     public interface IChatService
     {
         Task<string> SendMessageAsync(string message);
-
-        // Метод теперь асинхронный, так как он будет делать вызов API
         Task PrimeContextAsync(IEnumerable<ChatMessage> history);
+
+        // Новый метод для сброса текущей сессии чата.
+        void StartNewChat();
     }
 }

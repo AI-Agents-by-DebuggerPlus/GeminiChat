@@ -10,9 +10,6 @@ using System.Windows.Input;
 
 namespace GeminiChat.Wpf.ViewModels
 {
-    /// <summary>
-    /// Главная ViewModel, являющаяся "мозгом" всего приложения.
-    /// </summary>
     public class MainViewModel : ViewModelBase
     {
         private readonly ILogger _logger;
@@ -47,6 +44,7 @@ namespace GeminiChat.Wpf.ViewModels
 
         public ICommand SendCommand { get; }
         public ICommand OpenSettingsCommand { get; }
+        public ICommand NewChatCommand { get; }
 
         public MainViewModel(ILogger logger, IChatService chatService, SettingsManager settings, ChatHistoryManager chatHistoryManager, IServiceProvider serviceProvider)
         {
@@ -56,12 +54,9 @@ namespace GeminiChat.Wpf.ViewModels
             _chatHistoryManager = chatHistoryManager;
             _serviceProvider = serviceProvider;
 
-            // Загружаем историю из файла, но пока НЕ передаем ее в сервис.
-            // Это будет сделано в асинхронном методе InitializeAsync.
             ChatHistory = _chatHistoryManager.LoadHistory();
             _logger.LogInfo($"{ChatHistory.Count} messages loaded from local file.");
 
-            // Подписываемся на событие, чтобы сохранять новые сообщения в файл.
             ChatHistory.CollectionChanged += (s, e) => _chatHistoryManager.SaveHistory(ChatHistory);
 
             SendCommand = new RelayCommand(
@@ -70,16 +65,27 @@ namespace GeminiChat.Wpf.ViewModels
             );
 
             OpenSettingsCommand = new RelayCommand(_ => OnOpenSettings());
+
+            NewChatCommand = new RelayCommand(_ => OnNewChat());
         }
 
-        /// <summary>
-        /// Асинхронный метод для "заправки" контекста модели.
-        /// Вызывается один раз при запуске приложения.
-        /// </summary>
+        private void OnNewChat()
+        {
+            _logger.LogInfo("User requested a new chat.");
+
+            // 1. Очищаем коллекцию сообщений в интерфейсе.
+            // Это также приведет к сохранению пустой истории в файл.
+            ChatHistory.Clear();
+
+            // 2. Говорим сервису сбросить свою сессию.
+            _chatService.StartNewChat();
+
+            _logger.LogInfo("Chat history and session have been cleared.");
+        }
+
         public async Task InitializeAsync()
         {
             _logger.LogInfo("ViewModel asynchronous initialization started...");
-            // Вызываем асинхронный метод в сервисе чата для внедрения контекста.
             await _chatService.PrimeContextAsync(this.ChatHistory);
             _logger.LogInfo("ViewModel asynchronous initialization finished.");
         }
@@ -94,8 +100,6 @@ namespace GeminiChat.Wpf.ViewModels
             };
             settingsWindow.ShowDialog();
         }
-
-
 
         private async Task OnSend()
         {

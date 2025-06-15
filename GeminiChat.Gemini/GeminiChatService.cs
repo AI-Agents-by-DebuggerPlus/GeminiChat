@@ -3,7 +3,7 @@ using GeminiChat.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text; // <-- Добавляем для StringBuilder
+using System.Text;
 using System.Threading.Tasks;
 
 namespace GeminiChat.Gemini
@@ -30,10 +30,25 @@ namespace GeminiChat.Gemini
             _logger.LogInfo("GeminiChatService initialized.");
         }
 
+        /// <summary>
+        /// Сбрасывает текущую сессию чата, чтобы начать диалог с чистого листа.
+        /// </summary>
+        public void StartNewChat()
+        {
+            _logger.LogInfo("--- Starting New Chat Session ---");
+            // Просто создаем новую, пустую сессию, заменяя старую.
+            _chatSession = _model.StartChat();
+            _logger.LogInfo("A new, empty chat session has been created.");
+        }
+
+        /// <summary>
+        /// "Заправляет" сессию чата историей для восстановления контекста.
+        /// </summary>
         public async Task PrimeContextAsync(IEnumerable<ChatMessage> history)
         {
             _logger.LogInfo("--- Starting Context Priming For New Session ---");
-            _chatSession = _model.StartChat(); // Всегда начинаем с новой, чистой сессии
+            // Всегда начинаем с новой, чистой сессии
+            _chatSession = _model.StartChat();
 
             if (history == null || !history.Any())
             {
@@ -42,7 +57,6 @@ namespace GeminiChat.Gemini
                 return;
             }
 
-            // *** НАША НОВАЯ РАБОЧАЯ ЛОГИКА ***
             // 1. Собираем всю историю в одну большую строку.
             var contextBuilder = new StringBuilder();
             contextBuilder.AppendLine("СИСТЕМНАЯ ИНСТРУКЦИЯ: Это предыдущая история диалога. Запомни ее и используй для контекста в своих ответах. Не нужно пересказывать эту историю пользователю, просто знай ее.");
@@ -61,10 +75,8 @@ namespace GeminiChat.Gemini
             try
             {
                 // 2. Отправляем эту строку как "нулевое" сообщение в новой сессии.
-                // Модель ответит "ОК", и этот диалог сохранится в _chatSession,
-                // тем самым "запомнив" всю переданную историю.
                 var response = await _chatSession.GenerateContentAsync(contextPrompt);
-                _logger.LogInfo($"SUCCESS: Context priming message sent. Model responded with: '{response.Text}'");
+                _logger.LogInfo($"SUCCESS: Context priming message sent. Model responded with: '{response.Text.Trim()}'");
             }
             catch (Exception ex)
             {
