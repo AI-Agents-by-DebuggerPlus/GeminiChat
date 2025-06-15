@@ -38,8 +38,9 @@ namespace GeminiChat.Wpf
             services.AddSingleton<IConfiguration>(_configuration);
 
             // Регистрируем все наши сервисы как Singleton (один экземпляр на все приложение)
-            services.AddSingleton<ILogger, DebugLogger>();
+            services.AddSingleton<ILogger, FileLogger>();
             services.AddSingleton<SettingsManager>();
+            services.AddSingleton<ChatHistoryManager>(); // <-- Сервис для истории чата
 
             // Регистрируем IChatService с использованием фабрики, чтобы передать ему ключ API из конфигурации
             services.AddSingleton<IChatService>(provider =>
@@ -55,6 +56,7 @@ namespace GeminiChat.Wpf
                 provider.GetRequiredService<ILogger>(),
                 provider.GetRequiredService<IChatService>(),
                 provider.GetRequiredService<SettingsManager>(),
+                provider.GetRequiredService<ChatHistoryManager>(), // <-- Передаем сервис истории
                 provider // Передаем сам IServiceProvider для создания дочерних окон
             ));
 

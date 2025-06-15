@@ -1,5 +1,8 @@
-﻿using System.Windows;
-using System.Windows.Input; // Required for key events
+﻿using GeminiChat.Wpf.ViewModels;
+using System.Collections.Specialized;
+using System.Linq;
+using System.Windows;
+using System.Windows.Input;
 
 namespace GeminiChat.Wpf
 {
@@ -11,35 +14,63 @@ namespace GeminiChat.Wpf
         public MainWindow()
         {
             InitializeComponent();
+            // Подписываемся на событие Loaded, чтобы выполнить действия после полной загрузки окна.
+            this.Loaded += MainWindow_Loaded;
+        }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is MainViewModel viewModel)
+            {
+                // Подписываемся на событие изменения коллекции для автопрокрутки при новых сообщениях.
+                viewModel.ChatHistory.CollectionChanged += ChatHistory_CollectionChanged;
+
+                // Если история чата не пуста после загрузки, прокручиваем вниз.
+                if (viewModel.ChatHistory.Any())
+                {
+                    // Используем Dispatcher, чтобы прокрутка сработала после отрисовки элементов.
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        ChatScrollViewer.ScrollToBottom();
+                    });
+                }
+            }
+
+            // Устанавливаем фокус на поле ввода, когда окно загружено.
+            UserInputTextBox.Focus();
+        }
+
+        private void ChatHistory_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Если в коллекцию был добавлен новый элемент, прокручиваем вниз.
+            if (e.Action == NotifyCollectionChangedAction.Add)
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    ChatScrollViewer.ScrollToBottom();
+                });
+            }
         }
 
         private void UserInput_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            // Проверяем, нажат ли Enter
             if (e.Key == Key.Enter)
             {
-                // Если одновременно с Enter нажат Shift, ничего не делаем.
-                // TextBox сам добавит новую строку.
+                // Shift + Enter = новая строка (стандартное поведение).
                 if (Keyboard.Modifiers == ModifierKeys.Shift)
                 {
                     return;
                 }
 
-                // Если нажат только Enter, мы отправляем сообщение.
-                // Получаем доступ к нашей ViewModel из DataContext окна.
-                if (DataContext is ViewModels.MainViewModel viewModel)
+                // Только Enter = отправить сообщение.
+                if (DataContext is MainViewModel viewModel)
                 {
-                    // Проверяем, может ли команда выполниться (например, поле ввода не пустое).
                     if (viewModel.SendCommand.CanExecute(null))
                     {
-                        // Выполняем команду, которая находится в ViewModel.
                         viewModel.SendCommand.Execute(null);
                     }
                 }
-
-                // Помечаем событие как обработанное.
-                // Это не дает TextBox'у обработать Enter и добавить лишний перенос строки.
-                e.Handled = true;
+                e.Handled = true; // Помечаем, чтобы Enter не добавил пустую строку.
             }
         }
     }

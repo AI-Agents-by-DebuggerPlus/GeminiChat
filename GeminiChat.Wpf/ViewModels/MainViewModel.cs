@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
-using System.Windows; // <-- ВОТ ИСПРАВЛЕНИЕ
+using System.Windows;
 using System.Windows.Input;
 
 namespace GeminiChat.Wpf.ViewModels
@@ -14,23 +14,14 @@ namespace GeminiChat.Wpf.ViewModels
     {
         private readonly ILogger _logger;
         private readonly IChatService _chatService;
+        private readonly ChatHistoryManager _chatHistoryManager;
         private readonly IServiceProvider _serviceProvider;
         private string _userInput = string.Empty;
         private bool _isThinking;
 
-        /// <summary>
-        /// Коллекция для хранения истории чата.
-        /// </summary>
-        public ObservableCollection<ChatMessage> ChatHistory { get; } = new();
-
-        /// <summary>
-        /// Сервис для доступа к глобальным настройкам приложения.
-        /// </summary>
+        public ObservableCollection<ChatMessage> ChatHistory { get; set; }
         public SettingsManager Settings { get; }
 
-        /// <summary>
-        /// Текст, который пользователь вводит в данный момент.
-        /// </summary>
         public string UserInput
         {
             get => _userInput;
@@ -41,9 +32,6 @@ namespace GeminiChat.Wpf.ViewModels
             }
         }
 
-        /// <summary>
-        /// Флаг, показывающий, что приложение ожидает ответа от API.
-        /// </summary>
         public bool IsThinking
         {
             get => _isThinking;
@@ -54,24 +42,26 @@ namespace GeminiChat.Wpf.ViewModels
             }
         }
 
-        /// <summary>
-        /// Команда для отправки сообщения.
-        /// </summary>
         public ICommand SendCommand { get; }
-
-        /// <summary>
-        /// Команда для открытия окна настроек.
-        /// </summary>
         public ICommand OpenSettingsCommand { get; }
 
-        public MainViewModel(ILogger logger, IChatService chatService, SettingsManager settings, IServiceProvider serviceProvider)
+        public MainViewModel(ILogger logger, IChatService chatService, SettingsManager settings, ChatHistoryManager chatHistoryManager, IServiceProvider serviceProvider)
         {
             _logger = logger;
             _chatService = chatService;
             Settings = settings;
+            _chatHistoryManager = chatHistoryManager;
             _serviceProvider = serviceProvider;
 
-            _logger.LogInfo("MainViewModel created and services injected.");
+            // 1. Загружаем историю из файла.
+            ChatHistory = _chatHistoryManager.LoadHistory();
+            _logger.LogInfo($"{ChatHistory.Count} messages loaded from history.");
+
+            // 2. Передаем загруженную историю в сервис чата для восстановления контекста.
+            _chatService.PrimeHistory(ChatHistory);
+
+            // 3. Подписываемся на событие, чтобы сохранять новые сообщения в файл.
+            ChatHistory.CollectionChanged += (s, e) => _chatHistoryManager.SaveHistory(ChatHistory);
 
             SendCommand = new RelayCommand(
                 execute: async _ => await OnSend(),
@@ -84,12 +74,9 @@ namespace GeminiChat.Wpf.ViewModels
         private void OnOpenSettings()
         {
             _logger.LogInfo("Opening settings window...");
-            // Создаем новое окно настроек
             var settingsWindow = new SettingsWindow
             {
-                // Задаем ему в качестве DataContext новую ViewModel, полученную из DI-контейнера
                 DataContext = _serviceProvider.GetRequiredService<SettingsViewModel>(),
-                // Устанавливаем владельца, чтобы окно открылось по центру главного
                 Owner = Application.Current.MainWindow
             };
             settingsWindow.ShowDialog();

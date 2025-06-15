@@ -23,9 +23,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-
                 <TextBlock Grid.Column="0" Text="Gemini" FontSize="22" FontWeight="SemiBold" Foreground="#3C4043" VerticalAlignment="Center"/>
-
                 <Button Grid.Column="1" Command="{Binding OpenSettingsCommand}" Width="32" Height="32" ToolTip="Настройки">
                     <Button.Style>
                         <Style TargetType="Button">
@@ -107,7 +105,9 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
+                <!-- ИСПРАВЛЕНИЕ 2: Добавляем x:Name -->
                 <TextBox Grid.Column="0"
+                         x:Name="UserInputTextBox"
                          Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}"
                          AcceptsReturn="True"
                          PreviewKeyDown="UserInput_PreviewKeyDown"

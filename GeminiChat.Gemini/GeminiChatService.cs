@@ -1,6 +1,9 @@
-﻿using GenerativeAI;
-using GeminiChat.Core;
+﻿using GeminiChat.Core;
+using GenerativeAI;
+using GenerativeAI.Types;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace GeminiChat.Gemini
@@ -9,30 +12,56 @@ namespace GeminiChat.Gemini
     {
         private readonly ILogger _logger;
         private readonly GenerativeModel _model;
+        private ChatSession _chatSession;
 
-        // Конструктор теперь принимает ключ как параметр
         public GeminiChatService(ILogger logger, string apiKey)
         {
             _logger = logger;
 
-            if (string.IsNullOrWhiteSpace(apiKey) || apiKey == "СЮДА_ВСТАВЬТЕ_ВАШ_API_КЛЮЧ")
+            if (string.IsNullOrWhiteSpace(apiKey) || apiKey.StartsWith("СЮДА"))
             {
-                _logger.LogError("API Key is not configured in appsettings.json!", null);
-                throw new ArgumentException("API Key is missing. Please configure it in appsettings.json");
+                var errorMessage = "API Key is not configured correctly in appsettings.json!";
+                _logger.LogError(errorMessage, null);
+                throw new ArgumentException(errorMessage);
             }
 
             _model = new GenerativeModel(apiKey, model: "gemini-1.5-flash-latest");
-            _logger.LogInfo("GeminiChatService (using gunpal5's package) initialized.");
+
+            _chatSession = _model.StartChat();
+            _logger.LogInfo("GeminiChatService initialized.");
         }
 
-        // Метод SendMessageAsync остается без изменений
+        public void PrimeHistory(IEnumerable<ChatMessage> history)
+        {
+            if (history == null || !history.Any()) return;
+
+            _logger.LogInfo($"Priming chat service with {history.Count()} messages from history...");
+
+            _chatSession.History.Clear();
+            foreach (var message in history)
+            {
+                // *** ВОТ ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ ***
+                // Мы явно создаем List<Part>, как того требует библиотека,
+                // а не массив Part[].
+                _chatSession.History.Add(new Content
+                {
+                    Role = message.Author == Author.User ? "user" : "model",
+                    Parts = new List<Part> { new Part { Text = message.Content } }
+                });
+            }
+
+            _logger.LogInfo("Chat history has been successfully primed.");
+        }
+
         public async Task<string> SendMessageAsync(string message)
         {
-            _logger.LogInfo("Sending message to Gemini API...");
+            _logger.LogInfo("Sending message to Gemini API with chat history...");
             try
             {
-                var response = await _model.GenerateContentAsync(message);
+                var response = await _chatSession.GenerateContentAsync(message);
                 _logger.LogInfo("Response received from Gemini API.");
+                _logger.LogInfo($"Model response: {response.Text}");
+
                 return response.Text;
             }
             catch (Exception ex)
