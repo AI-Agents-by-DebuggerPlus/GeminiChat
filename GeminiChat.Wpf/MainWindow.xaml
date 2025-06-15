@@ -5,50 +5,149 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:GeminiChat.Wpf"
         mc:Ignorable="d"
-        Title="Gemini Chat" Height="600" Width="450"
-        WindowStartupLocation="CenterScreen">
-    <Grid Margin="10">
+        Title="Gemini Chat"
+        WindowState="Maximized"
+        Background="White"
+        FontFamily="Segoe UI">
+    <Grid Margin="20,0,20,0">
         <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="0,0,0,10">
+        <!-- 1. Заголовок окна -->
+        <Border Grid.Row="0" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="Gemini" FontSize="22" FontWeight="SemiBold" Foreground="#3C4043" VerticalAlignment="Center"/>
+
+                <Button Grid.Column="1" Command="{Binding OpenSettingsCommand}" Width="32" Height="32" ToolTip="Настройки">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="16">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#EFEFEF"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <Path Data="M19.43,12.98C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.65 15.48,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.52,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.98L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.52,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.48,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.98M12,15.5C10.07,15.5 8.5,13.93 8.5,12C8.5,10.07 10.07,8.5 12,8.5C13.93,8.5 15.5,10.07 15.5,12C15.5,13.93 13.93,15.5 12,15.5Z" Fill="#5F6368" Width="20" Height="20" Stretch="Uniform"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- 2. Область истории чата -->
+        <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" 
+                      VerticalScrollBarVisibility="Auto" Margin="0,10,0,10"
+                      FontFamily="{Binding Settings.ChatFontFamily}"
+                      FontSize="{Binding Settings.ChatFontSize}">
             <ItemsControl ItemsSource="{Binding ChatHistory}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border BorderBrush="LightGray" BorderThickness="0,0,0,1" Padding="5">
-                            <Grid Margin="0,5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock FontWeight="Bold" Text="{Binding Author}" VerticalAlignment="Top"/>
-                                <TextBlock Grid.Column="1" Margin="10,0,0,0" Text="{Binding Content}" TextWrapping="Wrap" />
-                            </Grid>
-                        </Border>
+                        <Grid Margin="0,10">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="HorizontalAlignment" Value="Left"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Author}" Value="User">
+                                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Author}" FontWeight="Bold" Foreground="#444746" Margin="10,0,10,5"/>
+                                <Border MaxWidth="700" Padding="12" CornerRadius="12">
+                                    <Border.Effect>
+                                        <DropShadowEffect ShadowDepth="1" Color="#E0E0E0" Opacity="0.5" BlurRadius="5"/>
+                                    </Border.Effect>
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="#F0F4F9"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Author}" Value="User">
+                                                    <Setter Property="Background" Value="#D1E3FF"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap" LineHeight="22"/>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
 
-        <Grid Grid.Row="1" Margin="0,5,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <!-- 3. Область ввода текста -->
+        <Border Grid.Row="2" Background="#F0F4F9" CornerRadius="28" Margin="150,10,150,20" Padding="5">
+            <Border.Effect>
+                <DropShadowEffect ShadowDepth="1" Color="#DADCE0" Opacity="0.8" BlurRadius="5"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <TextBox Grid.Column="0" 
-                     Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}" 
-                     Margin="0,0,10,0"
-                     VerticalContentAlignment="Center"
-                     AcceptsReturn="True"
-                     PreviewKeyDown="UserInput_PreviewKeyDown"/>
+                <TextBox Grid.Column="0"
+                         Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}"
+                         AcceptsReturn="True"
+                         PreviewKeyDown="UserInput_PreviewKeyDown"
+                         FontFamily="{Binding Settings.ChatFontFamily}"
+                         FontSize="{Binding Settings.ChatFontSize}"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         VerticalContentAlignment="Center"
+                         Padding="20,5,10,5"
+                         TextWrapping="Wrap"/>
 
-            <Button Grid.Column="1" 
-                    Content="Отправить"
-                    Command="{Binding SendCommand}"
-                    Padding="15,5"/>
-        </Grid>
+                <Button Grid.Column="1" Command="{Binding SendCommand}" Width="46" Height="46" Margin="5">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="#D1E3FF"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="23">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#A8C7FA"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Background" Value="#E0E0E0"/>
+                                    <Setter Property="Opacity" Value="0.7"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <Path Data="M1,21V12.5L10,12L1,2.5V1L23,12L1,23Z" Fill="Black" Width="20" Height="20" Stretch="Uniform"/>
+                </Button>
+            </Grid>
+        </Border>
+
     </Grid>
 </Window>
