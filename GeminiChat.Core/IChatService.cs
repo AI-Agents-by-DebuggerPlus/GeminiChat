@@ -1,15 +1,14 @@
 ﻿using GeminiChat.Core;
-using System.Collections.Generic; // <-- Добавить
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace GeminiChat.Core
 {
     public interface IChatService
     {
-        // Старый метод остается
         Task<string> SendMessageAsync(string message);
 
-        // Новый метод для загрузки истории в сервис
-        void PrimeHistory(IEnumerable<ChatMessage> history);
+        // Метод теперь асинхронный, так как он будет делать вызов API
+        Task PrimeContextAsync(IEnumerable<ChatMessage> history);
     }
 }

@@ -4,19 +4,23 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 
 namespace GeminiChat.Wpf.Services
 {
     public class ChatHistoryManager
     {
         private readonly string _historyFilePath;
+        private readonly ILogger _logger;
 
-        public ChatHistoryManager()
+        // Теперь сервис принимает логгер для отчетов
+        public ChatHistoryManager(ILogger logger)
         {
-            // Используем тот же подход, что и для настроек, но с другим именем файла
+            _logger = logger;
             string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string appFolderPath = Path.Combine(appDataPath, "GeminiChatWpf");
             _historyFilePath = Path.Combine(appFolderPath, "chathistory.json");
+            _logger.LogInfo($"Chat history path set to: {_historyFilePath}");
         }
 
         public void SaveHistory(ObservableCollection<ChatMessage> chatHistory)
@@ -26,10 +30,11 @@ namespace GeminiChat.Wpf.Services
                 string json = JsonConvert.SerializeObject(chatHistory, Newtonsoft.Json.Formatting.Indented);
                 Directory.CreateDirectory(Path.GetDirectoryName(_historyFilePath));
                 File.WriteAllText(_historyFilePath, json);
+                _logger.LogInfo($"Successfully saved {chatHistory.Count} messages to chat history file.");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // В реальном приложении здесь обязательно должно быть логирование ошибки
+                _logger.LogError("Failed to save chat history.", ex);
             }
         }
 
@@ -37,7 +42,7 @@ namespace GeminiChat.Wpf.Services
         {
             if (!File.Exists(_historyFilePath))
             {
-                // Если файла нет, возвращаем пустую коллекцию
+                _logger.LogInfo("Chat history file not found. Starting with a new chat.");
                 return new ObservableCollection<ChatMessage>();
             }
 
@@ -46,12 +51,18 @@ namespace GeminiChat.Wpf.Services
                 string json = File.ReadAllText(_historyFilePath);
                 var history = JsonConvert.DeserializeObject<List<ChatMessage>>(json);
 
-                // Преобразуем List<T> в ObservableCollection<T>
-                return history != null ? new ObservableCollection<ChatMessage>(history) : new ObservableCollection<ChatMessage>();
+                if (history == null || !history.Any())
+                {
+                    _logger.LogInfo("Loaded chat history file, but it was empty or invalid.");
+                    return new ObservableCollection<ChatMessage>();
+                }
+
+                _logger.LogInfo($"Successfully loaded {history.Count} messages from chat history file.");
+                return new ObservableCollection<ChatMessage>(history);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Если файл поврежден, тоже возвращаем пустую коллекцию
+                _logger.LogError("Failed to load or parse chat history file.", ex);
                 return new ObservableCollection<ChatMessage>();
             }
         }

@@ -11,39 +11,33 @@ namespace GeminiChat.Logging
 
         public FileLogger()
         {
-            // Создаем путь к папке логов
+            // Определяем путь к папке логов
             string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string logFolderPath = Path.Combine(appDataPath, "GeminiChatWpf", "Logs");
 
+            // Убедимся, что директория существует
             Directory.CreateDirectory(logFolderPath);
 
-            // Теперь будем использовать один и тот же файл для каждой сессии
-            _logFilePath = Path.Combine(logFolderPath, "session.log");
+            // Будем использовать один и тот же файл для всех сессий
+            _logFilePath = Path.Combine(logFolderPath, "session_log.txt");
 
             // *** ИЗМЕНЕНИЕ ЗДЕСЬ ***
-            // Очищаем старый лог-файл при каждом запуске приложения
-            try
-            {
-                if (File.Exists(_logFilePath))
-                {
-                    File.Delete(_logFilePath);
-                }
-            }
-            catch (Exception)
-            {
-                // Не критично, если не удалось удалить старый файл,
-                // просто продолжаем работу.
-            }
+            // Убираем очистку файла и вместо этого добавляем разделитель
+            // для новой сессии, чтобы сделать лог более читаемым.
+            WriteToFile("\n" +
+                        "====================================================\n" +
+                        $"          NEW SESSION STARTED: {DateTime.Now:G}\n" +
+                        "====================================================");
         }
 
         public void LogInfo(string message)
         {
-            WriteToFile($"[INFO] {DateTime.Now:G}: {message}");
+            WriteToFile($"[INFO] {DateTime.Now:HH:mm:ss.fff}: {message}");
         }
 
         public void LogError(string message, Exception? ex = null)
         {
-            WriteToFile($"[ERROR] {DateTime.Now:G}: {message}");
+            WriteToFile($"[ERROR] {DateTime.Now:HH:mm:ss.fff}: {message}");
             if (ex != null)
             {
                 WriteToFile(ex.ToString());

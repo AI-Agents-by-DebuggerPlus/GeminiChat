@@ -10,6 +10,9 @@ using System.Windows.Input;
 
 namespace GeminiChat.Wpf.ViewModels
 {
+    /// <summary>
+    /// Главная ViewModel, являющаяся "мозгом" всего приложения.
+    /// </summary>
     public class MainViewModel : ViewModelBase
     {
         private readonly ILogger _logger;
@@ -53,14 +56,12 @@ namespace GeminiChat.Wpf.ViewModels
             _chatHistoryManager = chatHistoryManager;
             _serviceProvider = serviceProvider;
 
-            // 1. Загружаем историю из файла.
+            // Загружаем историю из файла, но пока НЕ передаем ее в сервис.
+            // Это будет сделано в асинхронном методе InitializeAsync.
             ChatHistory = _chatHistoryManager.LoadHistory();
-            _logger.LogInfo($"{ChatHistory.Count} messages loaded from history.");
+            _logger.LogInfo($"{ChatHistory.Count} messages loaded from local file.");
 
-            // 2. Передаем загруженную историю в сервис чата для восстановления контекста.
-            _chatService.PrimeHistory(ChatHistory);
-
-            // 3. Подписываемся на событие, чтобы сохранять новые сообщения в файл.
+            // Подписываемся на событие, чтобы сохранять новые сообщения в файл.
             ChatHistory.CollectionChanged += (s, e) => _chatHistoryManager.SaveHistory(ChatHistory);
 
             SendCommand = new RelayCommand(
@@ -69,6 +70,18 @@ namespace GeminiChat.Wpf.ViewModels
             );
 
             OpenSettingsCommand = new RelayCommand(_ => OnOpenSettings());
+        }
+
+        /// <summary>
+        /// Асинхронный метод для "заправки" контекста модели.
+        /// Вызывается один раз при запуске приложения.
+        /// </summary>
+        public async Task InitializeAsync()
+        {
+            _logger.LogInfo("ViewModel asynchronous initialization started...");
+            // Вызываем асинхронный метод в сервисе чата для внедрения контекста.
+            await _chatService.PrimeContextAsync(this.ChatHistory);
+            _logger.LogInfo("ViewModel asynchronous initialization finished.");
         }
 
         private void OnOpenSettings()
@@ -81,6 +94,8 @@ namespace GeminiChat.Wpf.ViewModels
             };
             settingsWindow.ShowDialog();
         }
+
+
 
         private async Task OnSend()
         {

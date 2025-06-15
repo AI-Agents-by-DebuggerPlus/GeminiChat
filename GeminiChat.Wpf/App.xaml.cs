@@ -7,10 +7,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace GeminiChat.Wpf
 {
+    /// <summary>
+    /// Главный класс приложения, отвечающий за запуск и конфигурацию.
+    /// </summary>
     public partial class App : Application
     {
         private readonly ServiceProvider _serviceProvider;
@@ -40,13 +44,16 @@ namespace GeminiChat.Wpf
             // Регистрируем все наши сервисы как Singleton (один экземпляр на все приложение)
             services.AddSingleton<ILogger, FileLogger>();
             services.AddSingleton<SettingsManager>();
-            services.AddSingleton<ChatHistoryManager>(); // <-- Сервис для истории чата
+
+            // Регистрируем ChatHistoryManager через фабрику, чтобы передать ему логгер
+            services.AddSingleton(provider => new ChatHistoryManager(
+                provider.GetRequiredService<ILogger>()
+            ));
 
             // Регистрируем IChatService с использованием фабрики, чтобы передать ему ключ API из конфигурации
             services.AddSingleton<IChatService>(provider =>
             {
                 var logger = provider.GetRequiredService<ILogger>();
-                // Читаем ключ из appsettings.json
                 var apiKey = _configuration.GetValue<string>("Gemini:ApiKey");
                 return new GeminiChatService(logger, apiKey);
             });
@@ -56,7 +63,7 @@ namespace GeminiChat.Wpf
                 provider.GetRequiredService<ILogger>(),
                 provider.GetRequiredService<IChatService>(),
                 provider.GetRequiredService<SettingsManager>(),
-                provider.GetRequiredService<ChatHistoryManager>(), // <-- Передаем сервис истории
+                provider.GetRequiredService<ChatHistoryManager>(),
                 provider // Передаем сам IServiceProvider для создания дочерних окон
             ));
 
@@ -67,16 +74,28 @@ namespace GeminiChat.Wpf
             services.AddTransient<SettingsViewModel>();
         }
 
-        protected override void OnStartup(StartupEventArgs e)
+        /// <summary>
+        /// Этот метод вызывается при запуске приложения.
+        /// Он стал асинхронным, чтобы дождаться "заправки" контекста модели.
+        /// </summary>
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            // Получаем MainWindow из нашего DI-контейнера
+            // 1. Получаем ViewModel из DI-контейнера
+            var viewModel = _serviceProvider.GetService<MainViewModel>();
+
+            // 2. Выполняем асинхронную инициализацию ViewModel
+            // Приложение "подождет" здесь, пока не выполнится PrimeContextAsync
+            await viewModel.InitializeAsync();
+
+            // 3. Получаем главное окно
             var mainWindow = _serviceProvider.GetService<MainWindow>();
 
-            // Устанавливаем DataContext, чтобы окно знало о своей ViewModel
-            mainWindow.DataContext = _serviceProvider.GetService<MainViewModel>();
+            // 4. Устанавливаем DataContext, который теперь полностью готов
+            mainWindow.DataContext = viewModel;
 
+            // 5. Показываем окно
             mainWindow.Show();
         }
     }
