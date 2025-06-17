@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36127.28 d17.14
+VisualStudioVersion = 17.14.36127.28
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeminiChat.Wpf", "GeminiChat.Wpf\GeminiChat.Wpf.csproj", "{10657A46-FBF3-4F38-8A85-2B9141335635}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeminiChat.Core", "GeminiChat.Core\GeminiChat.Core.csproj", "{CEDA499A-E76E-42AE-BB21-9A341713666A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeminiChat.Logging", "GeminiChat.Logging\GeminiChat.Logging.csproj", "{73219909-D020-4634-8BF9-06BC6FD18D0E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeFormatting", "CodeFormatting\CodeFormatting.csproj", "{1E6CB097-40FC-B55A-79A7-DF4AEA32A3D2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{73219909-D020-4634-8BF9-06BC6FD18D0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{73219909-D020-4634-8BF9-06BC6FD18D0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{73219909-D020-4634-8BF9-06BC6FD18D0E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E6CB097-40FC-B55A-79A7-DF4AEA32A3D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E6CB097-40FC-B55A-79A7-DF4AEA32A3D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E6CB097-40FC-B55A-79A7-DF4AEA32A3D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E6CB097-40FC-B55A-79A7-DF4AEA32A3D2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

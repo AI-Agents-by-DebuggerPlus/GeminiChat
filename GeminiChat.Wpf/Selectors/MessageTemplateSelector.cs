@@ -12,11 +12,19 @@ namespace GeminiChat.Wpf.Selectors
 
         public override DataTemplate SelectTemplate(object item, DependencyObject container)
         {
-            if (item is ChatMessage message && message.Content.Trim().StartsWith("```"))
+            // Проверяем, является ли объект сообщения ChatMessage
+            if (item is ChatMessage message)
             {
-                return CodeTemplate;
+                // ИСПРАВЛЕНО: Добавляем проверку, что содержимое сообщения не является null
+                if (message.Content != null && message.Content.Trim().StartsWith("```"))
+                {
+                    // Если это блок кода, возвращаем шаблон для кода
+                    return CodeTemplate;
+                }
             }
 
+            // Во всех остальных случаях (включая сообщения с пустым содержимым)
+            // используем шаблон для обычного текста.
             return PlainTextTemplate;
         }
     }

@@ -1,77 +1,46 @@
-﻿using GeminiChat.Wpf.ViewModels;
-using System.Collections.Specialized;
-using System.Linq;
+﻿// MainWindow.xaml.cs
+using GeminiChat.Wpf.ViewModels;
+using System;
 using System.Windows;
-using System.Windows.Input;
 
 namespace GeminiChat.Wpf
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
         public MainWindow()
         {
             InitializeComponent();
-            // Подписываемся на событие Loaded, чтобы выполнить действия после полной загрузки окна.
-            this.Loaded += MainWindow_Loaded;
+            // Подписываемся на событие, когда окно полностью загружено
+            Loaded += MainWindow_Loaded;
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Убеждаемся, что DataContext - это наша MainViewModel
             if (DataContext is MainViewModel viewModel)
             {
-                // Подписываемся на событие изменения коллекции для автопрокрутки при новых сообщениях.
-                viewModel.ChatHistory.CollectionChanged += ChatHistory_CollectionChanged;
-
-                // Если история чата не пуста после загрузки, прокручиваем вниз.
-                if (viewModel.ChatHistory.Any())
-                {
-                    // Используем Dispatcher, чтобы прокрутка сработала после отрисовки элементов.
-                    Dispatcher.BeginInvoke(() =>
-                    {
-                        ChatScrollViewer.ScrollToBottom();
-                    });
-                }
-            }
-
-            // Устанавливаем фокус на поле ввода, когда окно загружено.
-            UserInputTextBox.Focus();
-        }
-
-        private void ChatHistory_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        {
-            // Если в коллекцию был добавлен новый элемент, прокручиваем вниз.
-            if (e.Action == NotifyCollectionChangedAction.Add)
-            {
-                Dispatcher.BeginInvoke(() =>
-                {
-                    ChatScrollViewer.ScrollToBottom();
-                });
+                // Подписываемся на событие из ViewModel
+                viewModel.MessageAdded += OnMessageAdded;
             }
         }
 
-        private void UserInput_PreviewKeyDown(object sender, KeyEventArgs e)
+        /// <summary>
+        /// Этот метод будет вызываться каждый раз, когда ViewModel добавляет сообщение.
+        /// </summary>
+        private void OnMessageAdded()
         {
-            if (e.Key == Key.Enter)
-            {
-                // Shift + Enter = новая строка (стандартное поведение).
-                if (Keyboard.Modifiers == ModifierKeys.Shift)
-                {
-                    return;
-                }
+            // Прокручиваем ScrollViewer в самый низ
+            MessagesScrollViewer.ScrollToEnd();
+        }
 
-                // Только Enter = отправить сообщение.
-                if (DataContext is MainViewModel viewModel)
-                {
-                    if (viewModel.SendCommand.CanExecute(null))
-                    {
-                        viewModel.SendCommand.Execute(null);
-                    }
-                }
-                e.Handled = true; // Помечаем, чтобы Enter не добавил пустую строку.
+        // Отписываемся от события при закрытии окна, чтобы избежать утечек памяти
+        protected override void OnClosed(EventArgs e)
+        {
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.MessageAdded -= OnMessageAdded;
             }
+            base.OnClosed(e);
         }
     }
 }

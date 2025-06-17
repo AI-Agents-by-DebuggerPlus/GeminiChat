@@ -1,9 +1,10 @@
-﻿using GeminiChat.Core;
+﻿// ViewModels/MainViewModel.cs
+using GeminiChat.Core;
 using GeminiChat.Wpf.Commands;
 using GeminiChat.Wpf.Services;
-using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -12,119 +13,144 @@ namespace GeminiChat.Wpf.ViewModels
 {
     public class MainViewModel : ViewModelBase
     {
-        private readonly ILogger _logger;
         private readonly IChatService _chatService;
+        private readonly ILogger _logger;
         private readonly ChatHistoryManager _chatHistoryManager;
-        private readonly IServiceProvider _serviceProvider;
-        private string _userInput = string.Empty;
-        private bool _isThinking;
+        private string _currentMessage = "";
+        private bool _isSending;
 
-        public ObservableCollection<ChatMessage> ChatHistory { get; set; }
-        public SettingsManager Settings { get; }
-
-        public string UserInput
+        public ObservableCollection<ChatMessage> Messages { get; }
+        public string CurrentMessage
         {
-            get => _userInput;
+            get => _currentMessage;
             set
             {
-                _userInput = value;
-                OnPropertyChanged();
+                if (SetProperty(ref _currentMessage, value))
+                {
+                    ((RelayCommand)SendMessageCommand).RaiseCanExecuteChanged();
+                }
             }
         }
-
-        public bool IsThinking
+        public bool IsSending
         {
-            get => _isThinking;
-            private set
+            get => _isSending;
+            set
             {
-                _isThinking = value;
-                OnPropertyChanged();
+                if (SetProperty(ref _isSending, value))
+                {
+                    ((RelayCommand)SendMessageCommand).RaiseCanExecuteChanged();
+                }
             }
         }
-
-        public ICommand SendCommand { get; }
-        public ICommand OpenSettingsCommand { get; }
+        public ICommand SendMessageCommand { get; }
         public ICommand NewChatCommand { get; }
 
-        public MainViewModel(ILogger logger, IChatService chatService, SettingsManager settings, ChatHistoryManager chatHistoryManager, IServiceProvider serviceProvider)
+        public event Action? MessageAdded;
+
+        // Конструктор за дизайнера
+        public MainViewModel()
         {
-            _logger = logger;
+            Messages = new ObservableCollection<ChatMessage>();
+            SendMessageCommand = new RelayCommand(_ => { }, _ => false);
+            NewChatCommand = new RelayCommand(_ => { });
+        }
+
+        public MainViewModel(IChatService chatService, ILogger logger, ChatHistoryManager chatHistoryManager)
+        {
             _chatService = chatService;
-            Settings = settings;
+            _logger = logger;
             _chatHistoryManager = chatHistoryManager;
-            _serviceProvider = serviceProvider;
-
-            ChatHistory = _chatHistoryManager.LoadHistory();
-            _logger.LogInfo($"{ChatHistory.Count} messages loaded from local file.");
-
-            ChatHistory.CollectionChanged += (s, e) => _chatHistoryManager.SaveHistory(ChatHistory);
-
-            SendCommand = new RelayCommand(
-                execute: async _ => await OnSend(),
-                canExecute: _ => !string.IsNullOrWhiteSpace(UserInput) && !IsThinking
-            );
-
-            OpenSettingsCommand = new RelayCommand(_ => OnOpenSettings());
-
-            NewChatCommand = new RelayCommand(_ => OnNewChat());
+            Messages = new ObservableCollection<ChatMessage>();
+            SendMessageCommand = new RelayCommand(async _ => await SendMessageAsync(), _ => CanSendMessage());
+            NewChatCommand = new RelayCommand(_ => NewChat());
+            LoadHistory();
         }
 
-        private void OnNewChat()
+        private bool CanSendMessage() => !string.IsNullOrWhiteSpace(CurrentMessage) && !IsSending;
+
+        private void AddMessageToCollection(ChatMessage message)
         {
-            _logger.LogInfo("User requested a new chat.");
-
-            // 1. Очищаем коллекцию сообщений в интерфейсе.
-            // Это также приведет к сохранению пустой истории в файл.
-            ChatHistory.Clear();
-
-            // 2. Говорим сервису сбросить свою сессию.
-            _chatService.StartNewChat();
-
-            _logger.LogInfo("Chat history and session have been cleared.");
-        }
-
-        public async Task InitializeAsync()
-        {
-            _logger.LogInfo("ViewModel asynchronous initialization started...");
-            await _chatService.PrimeContextAsync(this.ChatHistory);
-            _logger.LogInfo("ViewModel asynchronous initialization finished.");
-        }
-
-        private void OnOpenSettings()
-        {
-            _logger.LogInfo("Opening settings window...");
-            var settingsWindow = new SettingsWindow
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
-                DataContext = _serviceProvider.GetRequiredService<SettingsViewModel>(),
-                Owner = Application.Current.MainWindow
-            };
-            settingsWindow.ShowDialog();
+                _logger.LogInfo($"[UI] Adding message from '{message.Author}' to UI collection.");
+                Messages.Add(message);
+                _logger.LogInfo($"[UI] Message added. Collection count is now: {Messages.Count}");
+                MessageAdded?.Invoke();
+            }));
         }
 
-        private async Task OnSend()
+        private async Task SendMessageAsync()
         {
-            string messageToSend = UserInput;
+            var userMessageContent = CurrentMessage;
+            CurrentMessage = string.Empty;
+            var userMessage = new ChatMessage(Author.User, userMessageContent);
+            AddMessageToCollection(userMessage);
+            _chatHistoryManager.SaveHistory(Messages);
 
-            ChatHistory.Add(new ChatMessage(Author.User, messageToSend));
-            UserInput = string.Empty;
-
-            IsThinking = true;
-            _logger.LogInfo($"User message to be sent: {messageToSend}");
-
+            IsSending = true;
             try
             {
-                var responseText = await _chatService.SendMessageAsync(messageToSend);
-                ChatHistory.Add(new ChatMessage(Author.Model, responseText));
+                var responseText = await Task.Run(() => _chatService.SendMessageAsync(userMessageContent));
+
+                // --- НОВА ЛОГИКА ЗА РАЗДЕЛЯНЕ НА СЪОБЩЕНИЯ ---
+                ProcessAndDisplayResponse(responseText);
+
+                // Запазваме историята след като всички части са добавени
+                _chatHistoryManager.SaveHistory(Messages);
             }
             catch (Exception ex)
             {
-                _logger.LogError("Failed to get response from chat service.", ex);
-                ChatHistory.Add(new ChatMessage(Author.Model, "Извините, произошла ошибка."));
+                _logger.LogError("An error occurred during SendMessageAsync.", ex);
+                AddMessageToCollection(new ChatMessage(Author.Model, "Sorry, an error occurred."));
             }
             finally
             {
-                IsThinking = false;
+                IsSending = false;
             }
+        }
+
+        /// <summary>
+        /// НОВ МЕТОД: Анализира отговора и го разделя на части (текст/код).
+        /// </summary>
+        private void ProcessAndDisplayResponse(string response)
+        {
+            // Регулярен израз, който намира всички блокове, започващи и завършващи с ```
+            var codeBlockPattern = @"(```[\s\S]*?```)";
+            var parts = Regex.Split(response, codeBlockPattern);
+
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part))
+                {
+                    continue;
+                }
+
+                // Създаваме ново съобщение за всяка част
+                var message = new ChatMessage(Author.Model, part.Trim());
+                AddMessageToCollection(message);
+            }
+        }
+
+        private void LoadHistory()
+        {
+            var history = _chatHistoryManager.LoadHistory();
+            _logger.LogInfo($"Continuing session with {history.Count} messages from history.");
+            foreach (var message in history)
+            {
+                Messages.Add(message);
+            }
+            _chatService.LoadHistory(history);
+            Application.Current.Dispatcher.BeginInvoke(new Action(() => {
+                MessageAdded?.Invoke();
+            }), System.Windows.Threading.DispatcherPriority.ContextIdle);
+        }
+
+        private void NewChat()
+        {
+            _logger.LogInfo("--- NEW CHAT SESSION STARTED BY USER ---");
+            Messages.Clear();
+            _chatService.StartNewChat();
+            _chatHistoryManager.SaveHistory(Messages);
         }
     }
 }

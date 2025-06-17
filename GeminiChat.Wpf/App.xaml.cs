@@ -1,4 +1,5 @@
-﻿using GeminiChat.Core;
+﻿// App.xaml.cs
+using GeminiChat.Core;
 using GeminiChat.Gemini;
 using GeminiChat.Logging;
 using GeminiChat.Wpf.Services;
@@ -7,96 +8,64 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace GeminiChat.Wpf
 {
-    /// <summary>
-    /// Главный класс приложения, отвечающий за запуск и конфигурацию.
-    /// </summary>
     public partial class App : Application
     {
-        private readonly ServiceProvider _serviceProvider;
-        private readonly IConfiguration _configuration;
+        private readonly IServiceProvider _serviceProvider;
 
         public App()
         {
-            // Настройка чтения конфигурации из файла appsettings.json
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-            _configuration = builder.Build();
-
-            // Создание коллекции сервисов для Dependency Injection
             var services = new ServiceCollection();
             ConfigureServices(services);
-
-            // Построение провайдера сервисов
             _serviceProvider = services.BuildServiceProvider();
+        }
+
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            var logger = _serviceProvider.GetRequiredService<ILogger>();
+            AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+            {
+                if (args.ExceptionObject is Exception ex)
+                {
+                    logger.LogError("An unhandled exception occurred", ex);
+                }
+            };
+
+            var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
+            mainWindow.DataContext = _serviceProvider.GetRequiredService<MainViewModel>();
+            mainWindow.Show();
         }
 
         private void ConfigureServices(IServiceCollection services)
         {
-            // Добавляем саму конфигурацию как сервис, чтобы другие части могли ее получить
-            services.AddSingleton<IConfiguration>(_configuration);
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
 
-            // Регистрируем все наши сервисы как Singleton (один экземпляр на все приложение)
-            services.AddSingleton<ILogger, FileLogger>();
-            services.AddSingleton<SettingsManager>();
+            services.AddSingleton<IConfiguration>(configuration);
+            services.AddSingleton<ILogger>(new FileLogger("d:\\Programming\\Debug\\Logs\\GeminiChat\\"));
 
-            // Регистрируем ChatHistoryManager через фабрику, чтобы передать ему логгер
-            services.AddSingleton(provider => new ChatHistoryManager(
-                provider.GetRequiredService<ILogger>()
-            ));
-
-            // Регистрируем IChatService с использованием фабрики, чтобы передать ему ключ API из конфигурации
-            services.AddSingleton<IChatService>(provider =>
-            {
-                var logger = provider.GetRequiredService<ILogger>();
-                var apiKey = _configuration.GetValue<string>("Gemini:ApiKey");
-                return new GeminiChatService(logger, apiKey);
+            services.AddSingleton<IChatService>(provider => {
+                var apiKey = provider.GetRequiredService<IConfiguration>()["Gemini:ApiKey"];
+                if (string.IsNullOrEmpty(apiKey) || apiKey == "YOUR_API_KEY_HERE")
+                {
+                    MessageBox.Show("Gemini API Key is not configured in appsettings.json.", "Configuration Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    throw new InvalidOperationException("Gemini API Key is missing or not set.");
+                }
+                return new GeminiChatService(apiKey, provider.GetRequiredService<ILogger>());
             });
 
-            // Регистрируем MainViewModel и передаем ему все необходимые зависимости
-            services.AddSingleton(provider => new MainViewModel(
-                provider.GetRequiredService<ILogger>(),
-                provider.GetRequiredService<IChatService>(),
-                provider.GetRequiredService<SettingsManager>(),
-                provider.GetRequiredService<ChatHistoryManager>(),
-                provider // Передаем сам IServiceProvider для создания дочерних окон
-            ));
+            services.AddSingleton<ChatHistoryManager>();
+            services.AddSingleton<SettingsManager>();
 
-            // Регистрируем главное окно
-            services.AddSingleton<MainWindow>();
-
-            // Регистрируем ViewModel для окна настроек как Transient (новый экземпляр каждый раз)
+            services.AddTransient<MainViewModel>();
             services.AddTransient<SettingsViewModel>();
-        }
-
-        /// <summary>
-        /// Этот метод вызывается при запуске приложения.
-        /// Он стал асинхронным, чтобы дождаться "заправки" контекста модели.
-        /// </summary>
-        protected override async void OnStartup(StartupEventArgs e)
-        {
-            base.OnStartup(e);
-
-            // 1. Получаем ViewModel из DI-контейнера
-            var viewModel = _serviceProvider.GetService<MainViewModel>();
-
-            // 2. Выполняем асинхронную инициализацию ViewModel
-            // Приложение "подождет" здесь, пока не выполнится PrimeContextAsync
-            await viewModel.InitializeAsync();
-
-            // 3. Получаем главное окно
-            var mainWindow = _serviceProvider.GetService<MainWindow>();
-
-            // 4. Устанавливаем DataContext, который теперь полностью готов
-            mainWindow.DataContext = viewModel;
-
-            // 5. Показываем окно
-            mainWindow.Show();
+            services.AddTransient<MainWindow>();
+            services.AddTransient<SettingsWindow>();
         }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Commands/RelayCommand.cs
+using System;
 using System.Windows.Input;
 
 namespace GeminiChat.Wpf.Commands
@@ -8,6 +9,9 @@ namespace GeminiChat.Wpf.Commands
         private readonly Action<object?> _execute;
         private readonly Predicate<object?>? _canExecute;
 
+        /// <summary>
+        /// Событие, которое WPF использует для проверки, изменилось ли состояние команды.
+        /// </summary>
         public event EventHandler? CanExecuteChanged
         {
             add { CommandManager.RequerySuggested += value; }
@@ -20,7 +24,29 @@ namespace GeminiChat.Wpf.Commands
             _canExecute = canExecute;
         }
 
-        public bool CanExecute(object? parameter) => _canExecute == null || _canExecute(parameter);
-        public void Execute(object? parameter) => _execute(parameter);
+        /// <summary>
+        /// Метод, который определяет, может ли команда выполняться.
+        /// </summary>
+        public bool CanExecute(object? parameter)
+        {
+            return _canExecute == null || _canExecute(parameter);
+        }
+
+        /// <summary>
+        /// Метод, который выполняет логику команды.
+        /// </summary>
+        public void Execute(object? parameter)
+        {
+            _execute(parameter);
+        }
+
+        /// <summary>
+        /// НОВЫЙ МЕТОД: Позволяет вручную инициировать проверку CanExecute.
+        /// </summary>
+        public void RaiseCanExecuteChanged()
+        {
+            // Это заставит WPF снова вызвать CanExecute и обновить состояние кнопок.
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 }
