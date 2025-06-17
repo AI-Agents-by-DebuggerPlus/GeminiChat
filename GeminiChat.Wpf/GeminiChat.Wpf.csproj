@@ -27,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CodeFormatting\CodeFormatting.csproj" />
     <ProjectReference Include="..\GeminiChat.Core\GeminiChat.Core.csproj" />
     <ProjectReference Include="..\GeminiChat.Gemini\GeminiChat.Gemini.csproj" />
     <ProjectReference Include="..\GeminiChat.Logging\GeminiChat.Logging.csproj" />

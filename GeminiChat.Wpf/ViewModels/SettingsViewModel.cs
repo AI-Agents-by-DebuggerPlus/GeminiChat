@@ -1,60 +1,54 @@
-﻿using GeminiChat.Wpf.Commands;
+﻿// ViewModels/SettingsViewModel.cs
+using GeminiChat.Wpf.Commands;
 using GeminiChat.Wpf.Services;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows.Input;
-using System.Windows.Media;
 
 namespace GeminiChat.Wpf.ViewModels
 {
     public class SettingsViewModel : ViewModelBase
     {
         private readonly SettingsManager _settingsManager;
-        private FontFamily _selectedFontFamily;
-        private double _selectedFontSize;
+        private string _fontFamily;
+        private double _fontSize;
 
-        // Событие, которое попросит окно закрыться
-        public Action? CloseAction { get; set; }
+        public Action CloseAction { get; set; }
 
-        public ICollection<FontFamily> SystemFonts { get; } = Fonts.SystemFontFamilies
-            .OrderBy(f => f.Source)
-            .ToList();
-
-        public FontFamily SelectedFontFamily
+        public string FontFamily
         {
-            get => _selectedFontFamily;
-            set { _selectedFontFamily = value; OnPropertyChanged(); }
+            get => _fontFamily;
+            set => SetProperty(ref _fontFamily, value);
         }
 
-        public double SelectedFontSize
+        public double FontSize
         {
-            get => _selectedFontSize;
-            set { _selectedFontSize = value; OnPropertyChanged(); }
+            get => _fontSize;
+            set => SetProperty(ref _fontSize, value);
         }
 
         public ICommand SaveCommand { get; }
+        public ICommand CancelCommand { get; }
 
         public SettingsViewModel(SettingsManager settingsManager)
         {
             _settingsManager = settingsManager;
 
-            SelectedFontFamily = _settingsManager.ChatFontFamily;
-            SelectedFontSize = _settingsManager.ChatFontSize;
+            var settings = _settingsManager.LoadSettings();
+            FontFamily = settings.FontFamily;
+            FontSize = settings.FontSize;
 
-            SaveCommand = new RelayCommand(_ => OnSave());
+            SaveCommand = new RelayCommand(_ => Save());
+            CancelCommand = new RelayCommand(_ => Cancel());
         }
 
-        private void OnSave()
+        private void Save()
         {
-            // 1. Обновляем глобальный сервис настроек
-            _settingsManager.ChatFontFamily = SelectedFontFamily;
-            _settingsManager.ChatFontSize = SelectedFontSize;
+            _settingsManager.SaveSettings(new() { FontFamily = this.FontFamily, FontSize = this.FontSize });
+            CloseAction?.Invoke();
+        }
 
-            // 2. Сохраняем настройки в файл
-            _settingsManager.SaveSettings();
-
-            // 3. Вызываем событие, чтобы окно закрылось
+        private void Cancel()
+        {
             CloseAction?.Invoke();
         }
     }

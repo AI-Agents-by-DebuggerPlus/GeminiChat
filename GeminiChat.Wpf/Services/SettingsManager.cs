@@ -1,92 +1,68 @@
-﻿using GeminiChat.Wpf.ViewModels;
-using Newtonsoft.Json;
+﻿// Services/SettingsManager.cs
 using System;
 using System.IO;
-using System.Windows.Media;
+using System.Text.Json;
 
 namespace GeminiChat.Wpf.Services
 {
-    public class SettingsManager : ViewModelBase
+    /// <summary>
+    /// Класс для хранения данных настроек.
+    /// </summary>
+    public class AppSettings
     {
-        // Внутренний класс для удобной сериализации
-        private class AppSettingsModel
-        {
-            public string? FontName { get; set; }
-            public double FontSize { get; set; }
-        }
+        public string FontFamily { get; set; } = "Segoe UI";
+        public double FontSize { get; set; } = 15;
+    }
 
-        private readonly string _settingsFilePath;
-
-        private FontFamily _chatFontFamily = new FontFamily("Segoe UI");
-        private double _chatFontSize = 15;
-
-        public FontFamily ChatFontFamily
-        {
-            get => _chatFontFamily;
-            set { _chatFontFamily = value; OnPropertyChanged(); }
-        }
-
-        public double ChatFontSize
-        {
-            get => _chatFontSize;
-            set { _chatFontSize = value; OnPropertyChanged(); }
-        }
+    /// <summary>
+    /// Сервис для управления настройками приложения.
+    /// </summary>
+    public class SettingsManager
+    {
+        private readonly string _filePath;
 
         public SettingsManager()
         {
-            // Определяем путь к файлу настроек в папке данных пользователя
-            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string appFolderPath = Path.Combine(appDataPath, "GeminiChatWpf");
-            _settingsFilePath = Path.Combine(appFolderPath, "settings.json");
-
-            // Загружаем настройки при старте
-            LoadSettings();
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var appDir = Path.Combine(appDataPath, "GeminiChat");
+            Directory.CreateDirectory(appDir);
+            _filePath = Path.Combine(appDir, "settings.json");
         }
 
-        public void SaveSettings()
+        /// <summary>
+        /// Загружает настройки из файла. Метод теперь публичный и возвращает AppSettings.
+        /// </summary>
+        public AppSettings LoadSettings()
         {
-            var settingsModel = new AppSettingsModel
+            if (!File.Exists(_filePath))
             {
-                FontName = this.ChatFontFamily.Source,
-                FontSize = this.ChatFontSize
-            };
-
-            // *** ИСПРАВЛЕНИЕ ЗДЕСЬ ***
-            // Указываем полное имя, чтобы избежать двусмысленности
-            string json = JsonConvert.SerializeObject(settingsModel, Newtonsoft.Json.Formatting.Indented);
-
-            // Убедимся, что директория существует
-            Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath));
-
-            File.WriteAllText(_settingsFilePath, json);
-        }
-
-        private void LoadSettings()
-        {
-            if (!File.Exists(_settingsFilePath)) return;
+                return new AppSettings();
+            }
 
             try
             {
-                string json = File.ReadAllText(_settingsFilePath);
-                var settingsModel = JsonConvert.DeserializeObject<AppSettingsModel>(json);
-
-                if (settingsModel != null)
-                {
-                    if (!string.IsNullOrEmpty(settingsModel.FontName))
-                    {
-                        this.ChatFontFamily = new FontFamily(settingsModel.FontName);
-                    }
-                    // Добавим проверку, чтобы размер шрифта был в разумных пределах
-                    if (settingsModel.FontSize >= 10 && settingsModel.FontSize <= 32)
-                    {
-                        this.ChatFontSize = settingsModel.FontSize;
-                    }
-                }
+                var json = File.ReadAllText(_filePath);
+                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
             }
-            catch (Exception)
+            catch
             {
-                // Если файл поврежден, просто используем настройки по умолчанию.
-                // В реальном приложении здесь стоит добавить логирование ошибки.
+                return new AppSettings();
+            }
+        }
+
+        /// <summary>
+        /// Сохраняет настройки в файл. Метод теперь публичный.
+        /// </summary>
+        public void SaveSettings(AppSettings settings)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_filePath, json);
+            }
+            catch
+            {
+                // В реальном приложении здесь должно быть логирование
             }
         }
     }
