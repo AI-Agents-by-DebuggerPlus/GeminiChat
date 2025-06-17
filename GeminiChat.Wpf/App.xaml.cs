@@ -35,6 +35,7 @@ namespace GeminiChat.Wpf
             };
 
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
+            // ViewModel создается и присваивается здесь, со всеми зависимостями.
             mainWindow.DataContext = _serviceProvider.GetRequiredService<MainViewModel>();
             mainWindow.Show();
         }
@@ -59,13 +60,16 @@ namespace GeminiChat.Wpf
                 return new GeminiChatService(apiKey, provider.GetRequiredService<ILogger>());
             });
 
+            // Регистрация сервисов
             services.AddSingleton<ChatHistoryManager>();
             services.AddSingleton<SettingsManager>();
+            services.AddSingleton<IDialogService, DialogService>();
 
+            // Регистрация ViewModels и Views
             services.AddTransient<MainViewModel>();
             services.AddTransient<SettingsViewModel>();
             services.AddTransient<MainWindow>();
-            services.AddTransient<SettingsWindow>();
+            // SettingsWindow создается вручную в DialogService, регистрировать его как отдельный сервис не нужно.
         }
     }
 }
