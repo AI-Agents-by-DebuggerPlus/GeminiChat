@@ -1,4 +1,5 @@
 ﻿// App.xaml.cs
+using Executor; // <-- Важный using для доступа к библиотеке Executor
 using GeminiChat.Core;
 using GeminiChat.Gemini;
 using GeminiChat.Logging;
@@ -12,82 +13,65 @@ namespace GeminiChat.Wpf
 {
     public partial class App : Application
     {
-        private IServiceProvider? _serviceProvider;
+        private readonly IServiceProvider _serviceProvider;
+
+        public App()
+        {
+            var services = new ServiceCollection();
+            ConfigureServices(services);
+            _serviceProvider = services.BuildServiceProvider();
+        }
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            var logDirectory = "d:\\Programming\\Debug\\Logs\\GeminiChat\\";
-            var systemLogger = new FileLogger(System.IO.Path.Combine(logDirectory, "system.log"), clearOnStartup: true);
+            var dialogService = _serviceProvider.GetRequiredService<IDialogService>();
 
-            // Логируем необработанные исключения в системный лог
+            if (!dialogService.EnsureApiKeyIsSet())
+            {
+                Shutdown();
+                return;
+            }
+
+            var logger = _serviceProvider.GetRequiredService<ILogger>();
             AppDomain.CurrentDomain.UnhandledException += (s, args) =>
             {
                 if (args.ExceptionObject is Exception ex)
                 {
-                    systemLogger.LogError("An unhandled exception occurred", ex);
+                    logger.LogError("An unhandled exception occurred", ex);
                 }
             };
-
-            var settingsManager = new SettingsManager();
-            var settings = settingsManager.LoadSettings();
-
-            // Проверяем ключ. Если его нет, показываем окно настроек.
-            if (string.IsNullOrEmpty(settings.ApiKey))
-            {
-                systemLogger.LogInfo("API Key is missing. Showing settings window.");
-
-                // Для окна настроек нам нужен только SettingsManager и системный логгер.
-                var settingsViewModel = new SettingsViewModel(settingsManager, systemLogger);
-                var settingsWindow = new SettingsWindow(settingsViewModel);
-
-                var dialogResult = settingsWindow.ShowDialog();
-
-                if (dialogResult != true)
-                {
-                    // Пользователь нажал "Отмена" или закрыл окно.
-                    systemLogger.LogInfo("User cancelled API key entry. Shutting down.");
-                    Shutdown();
-                    return;
-                }
-
-                // Если пользователь сохранил ключ, перезагружаем настройки.
-                settings = settingsManager.LoadSettings();
-                systemLogger.LogInfo("API Key has been set. Proceeding with application startup.");
-            }
-
-            // --- Этот код выполнится, только если у нас есть валидный ключ ---
-            var services = new ServiceCollection();
-            ConfigureServices(services, settings, logDirectory);
-            _serviceProvider = services.BuildServiceProvider();
 
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
             mainWindow.DataContext = _serviceProvider.GetRequiredService<MainViewModel>();
             mainWindow.Show();
         }
 
-        private void ConfigureServices(IServiceCollection services, AppSettings settings, string logDirectory)
+        private void ConfigureServices(IServiceCollection services)
         {
-            // Регистрируем системный логгер как основной ILogger.
-            // Он будет использоваться всеми, кто просит ILogger, кроме ChatService.
+            var logDirectory = "d:\\Programming\\Debug\\Logs\\GeminiChat\\";
             services.AddSingleton<ILogger>(new FileLogger(System.IO.Path.Combine(logDirectory, "system.log")));
 
-            // Регистрируем остальные сервисы.
+            var settingsManager = new SettingsManager();
+            var settings = settingsManager.LoadSettings();
             services.AddSingleton(settings);
-            services.AddSingleton<SettingsManager>();
+            services.AddSingleton(settingsManager);
 
             services.AddSingleton<IChatService>(provider =>
             {
-                // Создаем специальный логгер для чата.
                 var chatLogger = new FileLogger(System.IO.Path.Combine(logDirectory, "chat.log"));
-                // И передаем его в сервис.
                 return new GeminiChatService(settings.ApiKey!, chatLogger);
             });
 
             services.AddSingleton<ChatHistoryManager>();
             services.AddSingleton<IDialogService, DialogService>();
 
+            // --- НОВЫЕ СТРОКИ: Регистрация Executor и Interpreter ---
+            services.AddSingleton<CommandExecutor>();
+            services.AddSingleton<ICommandInterpreter, CommandInterpreter>();
+
+            // Регистрация ViewModels и Views
             services.AddTransient<MainViewModel>();
             services.AddTransient<SettingsViewModel>();
             services.AddTransient<MainWindow>();
