@@ -6,9 +6,7 @@ using GeminiChat.Wpf.Services;
 using GeminiChat.Wpf.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Diagnostics; // <-- Важный using для работы с процессами
 using System.Windows;
-using System.Windows.Threading;
 
 namespace GeminiChat.Wpf
 {
@@ -23,49 +21,43 @@ namespace GeminiChat.Wpf
             var logDirectory = "d:\\Programming\\Debug\\Logs\\GeminiChat\\";
             var systemLogger = new FileLogger(System.IO.Path.Combine(logDirectory, "system.log"), clearOnStartup: true);
 
-            // Настраиваем глобальные обработчики ошибок
-            SetupExceptionHandlers(systemLogger);
+            // Логируем необработанные исключения в системный лог
+            AppDomain.CurrentDomain.UnhandledException += (s, args) =>
+            {
+                if (args.ExceptionObject is Exception ex)
+                {
+                    systemLogger.LogError("An unhandled exception occurred", ex);
+                }
+            };
 
             var settingsManager = new SettingsManager();
             var settings = settingsManager.LoadSettings();
 
-            // Проверяем, есть ли валидный ключ
+            // Проверяем ключ. Если его нет, показываем окно настроек.
             if (string.IsNullOrEmpty(settings.ApiKey))
             {
                 systemLogger.LogInfo("API Key is missing. Showing settings window.");
+
+                // Для окна настроек нам нужен только SettingsManager и системный логгер.
                 var settingsViewModel = new SettingsViewModel(settingsManager, systemLogger);
                 var settingsWindow = new SettingsWindow(settingsViewModel);
 
                 var dialogResult = settingsWindow.ShowDialog();
 
-                if (dialogResult == true)
+                if (dialogResult != true)
                 {
-                    // --- ГЛАВНОЕ ИЗМЕНЕНИЕ: ЛОГИКА ПЕРЕЗАПУСКА ---
-                    systemLogger.LogInfo("API Key saved. Restarting the application...");
-
-                    // Получаем путь к текущему запущенному .exe файлу
-                    var processPath = Process.GetCurrentProcess().MainModule?.FileName;
-                    if (processPath != null)
-                    {
-                        // Запускаем новую копию приложения
-                        Process.Start(processPath);
-                    }
-
-                    // Немедленно закрываем текущий "сломанный" процесс
-                    Shutdown();
-                    return; // Выходим, чтобы не продолжать выполнение
-                }
-                else
-                {
-                    // Пользователь нажал "Отмена" или закрыл окно
+                    // Пользователь нажал "Отмена" или закрыл окно.
                     systemLogger.LogInfo("User cancelled API key entry. Shutting down.");
                     Shutdown();
                     return;
                 }
+
+                // Если пользователь сохранил ключ, перезагружаем настройки.
+                settings = settingsManager.LoadSettings();
+                systemLogger.LogInfo("API Key has been set. Proceeding with application startup.");
             }
 
-            // Этот код выполнится, только если ключ уже был (т.е. при втором, "чистом" запуске)
-            systemLogger.LogInfo("API Key found. Starting application normally.");
+            // --- Этот код выполнится, только если у нас есть валидный ключ ---
             var services = new ServiceCollection();
             ConfigureServices(services, settings, logDirectory);
             _serviceProvider = services.BuildServiceProvider();
@@ -75,34 +67,21 @@ namespace GeminiChat.Wpf
             mainWindow.Show();
         }
 
-        private void SetupExceptionHandlers(ILogger logger)
-        {
-            // Обработчик для ошибок в UI-потоке
-            this.Dispatcher.UnhandledException += (s, e) =>
-            {
-                logger.LogError("A UI Dispatcher unhandled exception occurred", e.Exception);
-                e.Handled = true;
-            };
-
-            // Обработчик для всех остальных ошибок
-            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
-            {
-                if (e.ExceptionObject is Exception ex)
-                {
-                    logger.LogError("An AppDomain unhandled exception occurred", ex);
-                }
-            };
-        }
-
         private void ConfigureServices(IServiceCollection services, AppSettings settings, string logDirectory)
         {
+            // Регистрируем системный логгер как основной ILogger.
+            // Он будет использоваться всеми, кто просит ILogger, кроме ChatService.
             services.AddSingleton<ILogger>(new FileLogger(System.IO.Path.Combine(logDirectory, "system.log")));
+
+            // Регистрируем остальные сервисы.
             services.AddSingleton(settings);
             services.AddSingleton<SettingsManager>();
 
             services.AddSingleton<IChatService>(provider =>
             {
+                // Создаем специальный логгер для чата.
                 var chatLogger = new FileLogger(System.IO.Path.Combine(logDirectory, "chat.log"));
+                // И передаем его в сервис.
                 return new GeminiChatService(settings.ApiKey!, chatLogger);
             });
 

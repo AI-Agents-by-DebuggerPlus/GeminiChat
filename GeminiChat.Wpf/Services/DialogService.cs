@@ -1,4 +1,5 @@
 ﻿// Services/DialogService.cs
+using GeminiChat.Core; // <-- Важный using для ILogger
 using GeminiChat.Wpf.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -28,13 +29,14 @@ namespace GeminiChat.Wpf.Services
         public bool EnsureApiKeyIsSet()
         {
             var settingsManager = _serviceProvider.GetRequiredService<SettingsManager>();
+            var logger = _serviceProvider.GetRequiredService<ILogger>();
             var settings = settingsManager.LoadSettings();
 
             while (string.IsNullOrEmpty(settings.ApiKey))
             {
                 // Получаем новый экземпляр ViewModel из контейнера.
                 // Контейнер сам внедрит в него SettingsManager и ILogger.
-                var settingsViewModel = _serviceProvider.GetRequiredService<SettingsViewModel>();
+                var settingsViewModel = new SettingsViewModel(settingsManager, logger);
                 var settingsWindow = new SettingsWindow(settingsViewModel);
 
                 var dialogResult = settingsWindow.ShowDialog();

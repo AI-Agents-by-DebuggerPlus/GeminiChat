@@ -5,6 +5,7 @@ using GeminiChat.Wpf.Messaging;
 using GeminiChat.Wpf.Services;
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized; // Важный using для отслеживания изменений
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
@@ -34,9 +35,12 @@ namespace GeminiChat.Wpf.ViewModels
         public string FontFamily { get => _fontFamily; set => SetProperty(ref _fontFamily, value); }
         public double FontSize { get => _fontSize; set => SetProperty(ref _fontSize, value); }
 
+        // --- Команды ---
         public ICommand SendMessageCommand { get; }
         public ICommand NewChatCommand { get; }
         public ICommand OpenSettingsCommand { get; }
+
+        // --- События ---
         public event Action? MessageAdded;
 
         // Конструктор для дизайнера
@@ -51,9 +55,6 @@ namespace GeminiChat.Wpf.ViewModels
         // Основной конструктор
         public MainViewModel(IChatService chatService, ILogger logger, ChatHistoryManager chatHistoryManager, IDialogService dialogService, SettingsManager settingsManager)
         {
-            // <--- ТОЧКА ОСТАНОВА 1: Конструктор MainViewModel
-            // Цель: Убедиться, что DI-контейнер успешно создал все сервисы и передал их сюда.
-            // Проверьте, что ни один из параметров (chatService, logger и т.д.) не равен null.
             _chatService = chatService;
             _logger = logger;
             _chatHistoryManager = chatHistoryManager;
@@ -61,21 +62,30 @@ namespace GeminiChat.Wpf.ViewModels
             _settingsManager = settingsManager;
 
             Messages = new ObservableCollection<ChatMessage>();
+            // --- ГЛАВНОЕ ИЗМЕНЕНИЕ: Подписываемся на событие изменения коллекции ---
+            Messages.CollectionChanged += OnMessagesChanged;
+
             SendMessageCommand = new RelayCommand(async _ => await SendMessageAsync(), _ => !string.IsNullOrWhiteSpace(CurrentMessage) && !IsSending);
             NewChatCommand = new RelayCommand(_ => NewChat());
             OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
 
             Messenger.Register<SettingsUpdatedMessage>(OnSettingsUpdated);
-
             LoadFontSettings();
             LoadHistory();
         }
 
+        /// <summary>
+        /// Этот метод автоматически вызывается каждый раз, когда сообщение добавляется или удаляется.
+        /// </summary>
+        private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Сохраняем текущее состояние чата в файл. Это гарантирует, что сохранение
+            // произойдет только после того, как UI-поток реально изменил коллекцию.
+            _chatHistoryManager?.SaveHistory(Messages);
+        }
+
         private void OnSettingsUpdated(SettingsUpdatedMessage message)
         {
-            // <--- ТОЧКА ОСТАНОВА 2: Получение обновления настроек
-            // Цель: Проверить, что "Мессенджер" работает и эта ViewModel реагирует на
-            // сохранение настроек в другом окне.
             _logger?.LogInfo("Received settings update message. Applying new fonts.");
             LoadFontSettings();
         }
@@ -83,9 +93,6 @@ namespace GeminiChat.Wpf.ViewModels
         private void LoadFontSettings()
         {
             if (_settingsManager == null) return;
-            // <--- ТОЧКА ОСТАНОВА 3: Загрузка настроек шрифта
-            // Цель: Посмотреть, какие именно значения для FontFamily и FontSize
-            // загружаются из файла и присваиваются свойствам.
             var settings = _settingsManager.LoadSettings();
             FontFamily = settings.FontFamily;
             FontSize = settings.FontSize;
@@ -93,9 +100,6 @@ namespace GeminiChat.Wpf.ViewModels
 
         private void AddMessageToCollection(ChatMessage message)
         {
-            // <--- ТОЧКА ОСТАНОВА 4: Добавление сообщения в UI
-            // Цель: Посмотреть на объект 'message' прямо перед его добавлением в коллекцию.
-            // Убедитесь, что message.Content содержит ожидаемый текст.
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
                 Messages.Add(message);
@@ -105,27 +109,20 @@ namespace GeminiChat.Wpf.ViewModels
 
         private async Task SendMessageAsync()
         {
-            if (_chatService == null || _chatHistoryManager == null) return;
+            if (_chatService == null) return;
 
-            // <--- ТОЧКА ОСТАНОВА 5: Начало отправки
-            // Цель: Посмотреть, какое именно сообщение от пользователя (`userMessageContent`)
-            // будет отправлено в сервис.
             var userMessageContent = CurrentMessage;
             CurrentMessage = string.Empty;
             var userMessage = new ChatMessage(Author.User, userMessageContent);
             AddMessageToCollection(userMessage);
-            _chatHistoryManager.SaveHistory(Messages);
+            // УБРАНО: Мы больше не сохраняем историю вручную отсюда
+
             IsSending = true;
             try
             {
                 var responseText = await Task.Run(() => _chatService.SendMessageAsync(userMessageContent));
-
-                // <--- ТОЧКА ОСТАНОВА 6: Получен ответ от Gemini
-                // Цель: Проанализировать 'responseText'. Это "сырой" ответ от API.
-                // Именно здесь мы можем увидеть, содержит ли он ```, текст или и то, и другое.
                 ProcessAndDisplayResponse(responseText);
-
-                _chatHistoryManager.SaveHistory(Messages);
+                // УБРАНО: И отсюда тоже
             }
             finally { IsSending = false; }
         }
@@ -136,9 +133,6 @@ namespace GeminiChat.Wpf.ViewModels
             var parts = Regex.Split(response, codeBlockPattern);
             foreach (var part in parts)
             {
-                // <--- ТОЧКА ОСТАНОВА 7: Разделение ответа
-                // Цель: Посмотреть на каждую отдельную часть ('part') после разделения.
-                // Это поможет понять, почему какой-то из блоков не отображается.
                 if (string.IsNullOrWhiteSpace(part)) continue;
                 var message = new ChatMessage(Author.Model, part.Trim());
                 AddMessageToCollection(message);
@@ -159,18 +153,14 @@ namespace GeminiChat.Wpf.ViewModels
 
         private void NewChat()
         {
-            if (_chatService == null || _chatHistoryManager == null || _logger == null) return;
+            if (_chatService == null || _logger == null) return;
             _logger.LogInfo("--- NEW CHAT SESSION STARTED BY USER ---");
-            Messages.Clear();
+            Messages.Clear(); // Это также вызовет OnMessagesChanged и сохранит пустую историю
             _chatService.StartNewChat();
-            _chatHistoryManager.SaveHistory(Messages);
         }
 
         private void OpenSettings()
         {
-            // <--- ТОЧКА ОСТАНОВА 8: Открытие настроек
-            // Цель: Убедиться, что команда на открытие настроек вызывается
-            // и сервис _dialogService не равен null.
             _dialogService?.ShowSettingsDialog();
         }
     }
