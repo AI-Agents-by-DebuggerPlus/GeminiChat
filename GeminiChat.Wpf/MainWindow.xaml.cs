@@ -20,27 +20,27 @@ namespace GeminiChat.Wpf
             if (DataContext is MainViewModel viewModel)
             {
                 // Подписываемся на событие из ViewModel
-                viewModel.MessageAdded += OnMessageAdded;
+                //viewModel.MessageAdded += OnMessageAdded;
             }
         }
 
         /// <summary>
         /// Этот метод будет вызываться каждый раз, когда ViewModel добавляет сообщение.
         /// </summary>
-        private void OnMessageAdded()
-        {
-            // Прокручиваем ScrollViewer в самый низ
-            MessagesScrollViewer.ScrollToEnd();
-        }
+        //private void OnMessageAdded()
+        //{
+        //    // Прокручиваем ScrollViewer в самый низ
+        //    MessagesScrollViewer.ScrollToEnd();
+        //}
 
         // Отписываемся от события при закрытии окна, чтобы избежать утечек памяти
-        protected override void OnClosed(EventArgs e)
-        {
-            if (DataContext is MainViewModel viewModel)
-            {
-                viewModel.MessageAdded -= OnMessageAdded;
-            }
-            base.OnClosed(e);
-        }
+        //protected override void OnClosed(EventArgs e)
+        //{
+        //    if (DataContext is MainViewModel viewModel)
+        //    {
+        //        viewModel.MessageAdded -= OnMessageAdded;
+        //    }
+        //    base.OnClosed(e);
+        //}
     }
 }

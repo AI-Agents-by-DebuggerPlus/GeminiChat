@@ -11,24 +11,20 @@ namespace GeminiChat.Logging
         private readonly string _logFilePath;
         private readonly object _lock = new object();
 
-        public FileLogger(string logDirectory)
+        // Конструктор теперь принимает полный путь к файлу
+        public FileLogger(string logFilePath, bool clearOnStartup = false)
         {
+            _logFilePath = logFilePath;
+            var logDirectory = Path.GetDirectoryName(logFilePath);
             if (!Directory.Exists(logDirectory))
             {
-                Directory.CreateDirectory(logDirectory);
+                Directory.CreateDirectory(logDirectory!);
             }
-            _logFilePath = Path.Combine(logDirectory, "session.log");
 
-            // ИСПРАВЛЕНО: Добавляем разделитель для новой сессии при запуске
-            try
+            if (clearOnStartup)
             {
-                lock (_lock)
-                {
-                    File.AppendAllText(_logFilePath,
-                        $"{Environment.NewLine}--- NEW SESSION STARTED AT {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---{Environment.NewLine}{Environment.NewLine}");
-                }
+                try { File.Delete(_logFilePath); } catch { /* Игнорируем */ }
             }
-            catch { /* Игнорируем */ }
         }
 
         private void Log(string message, string level)
@@ -41,7 +37,7 @@ namespace GeminiChat.Logging
                     File.AppendAllText(_logFilePath, formattedMessage);
                 }
             }
-            catch { /* Игнорируем ошибки логирования */ }
+            catch { /* Игнорируем */ }
         }
 
         public void LogInfo(string message) => Log(message, "INFO");

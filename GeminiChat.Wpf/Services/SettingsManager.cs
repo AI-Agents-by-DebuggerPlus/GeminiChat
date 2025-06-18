@@ -2,6 +2,8 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
 
 namespace GeminiChat.Wpf.Services
 {
@@ -12,6 +14,8 @@ namespace GeminiChat.Wpf.Services
     {
         public string FontFamily { get; set; } = "Segoe UI";
         public double FontSize { get; set; } = 15;
+        // --- НОВОЕ СВОЙСТВО ---
+        public string? ApiKey { get; set; }
     }
 
     /// <summary>
@@ -24,19 +28,19 @@ namespace GeminiChat.Wpf.Services
         public SettingsManager()
         {
             var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var appDir = Path.Combine(appDataPath, "GeminiChat");
+            var appDir = Path.Combine(appDataPath, "GeminiChatWpf"); // Используем уникальное имя
             Directory.CreateDirectory(appDir);
             _filePath = Path.Combine(appDir, "settings.json");
         }
 
-        /// <summary>
-        /// Загружает настройки из файла. Метод теперь публичный и возвращает AppSettings.
-        /// </summary>
         public AppSettings LoadSettings()
         {
             if (!File.Exists(_filePath))
             {
-                return new AppSettings();
+                // Если файла нет, создаем и возвращаем настройки по умолчанию
+                var defaultSettings = new AppSettings();
+                SaveSettings(defaultSettings);
+                return defaultSettings;
             }
 
             try
@@ -50,14 +54,17 @@ namespace GeminiChat.Wpf.Services
             }
         }
 
-        /// <summary>
-        /// Сохраняет настройки в файл. Метод теперь публичный.
-        /// </summary>
         public void SaveSettings(AppSettings settings)
         {
             try
             {
-                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+                // Добавляем опции для корректной сериализации кириллицы
+                var options = new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+                };
+                var json = JsonSerializer.Serialize(settings, options);
                 File.WriteAllText(_filePath, json);
             }
             catch

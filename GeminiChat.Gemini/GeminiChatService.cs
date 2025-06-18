@@ -16,40 +16,29 @@ namespace GeminiChat.Gemini
     {
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
-        private readonly ILogger _logger;
+        private readonly ILogger _chatLogger;
         private List<GeminiRequestContent> _history = new List<GeminiRequestContent>();
 
-        public GeminiChatService(string apiKey, ILogger logger)
+        public GeminiChatService(string apiKey, ILogger chatLogger)
         {
             _apiKey = apiKey;
-            _logger = logger;
-            _httpClient = new HttpClient();
-            _httpClient.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+            _chatLogger = chatLogger;
+            _httpClient = new HttpClient { BaseAddress = new Uri("https://generativelanguage.googleapis.com/") };
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _logger.LogInfo("Gemini Service Initialized with HttpClient.");
         }
 
         public async Task<string> SendMessageAsync(string message)
         {
             try
             {
-                // --- НОВОЕ ЛОГИРОВАНИЕ: Логируем сообщение, которое отправляем ---
-                _logger.LogInfo($"--> Sending message to Gemini: \"{message}\"");
-
+                _chatLogger.LogInfo($"--> USER: {message}");
                 if (!string.IsNullOrWhiteSpace(message))
                 {
                     _history.Add(new GeminiRequestContent { Role = "user", Parts = new[] { new Part { Text = message } } });
                 }
 
-                var validHistory = _history
-                    .Where(h => h.Parts != null && h.Parts.Any(p => !string.IsNullOrWhiteSpace(p.Text)))
-                    .ToList();
-
-                if (!validHistory.Any())
-                {
-                    _logger.LogWarning("SendMessageAsync called but no valid content to send.");
-                    return "Please provide a message.";
-                }
+                var validHistory = _history.Where(h => h.Parts != null && h.Parts.Any(p => !string.IsNullOrWhiteSpace(p.Text))).ToList();
+                if (!validHistory.Any()) return "Please provide a message.";
 
                 var requestPayload = new GeminiRequest { Contents = validHistory.ToArray() };
                 var jsonPayload = JsonSerializer.Serialize(requestPayload);
@@ -61,33 +50,21 @@ namespace GeminiChat.Gemini
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    // --- ЛОГИРОВАНИЕ ОШИБКИ: Уже было, но теперь мы знаем, что оно работает ---
-                    _logger.LogError($"Gemini API Error: {response.StatusCode} - {errorContent}");
+                    _chatLogger.LogError($"API Error: {response.StatusCode} - {errorContent}");
                     return "Error communicating with the Gemini API.";
                 }
 
                 var jsonResponse = await response.Content.ReadAsStringAsync();
                 var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(jsonResponse);
+                var responseText = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text ?? "No content received.";
 
-                var responseText = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text ?? string.Empty;
-
-                if (string.IsNullOrEmpty(responseText))
-                {
-                    // --- НОВОЕ ЛОГИРОВАНИЕ: Если ответ пустой, сообщаем об этом ---
-                    _logger.LogWarning("<-- Received an empty response from Gemini.");
-                    return "Received an empty response from the service.";
-                }
-
-                // --- НОВОЕ ЛОГИРОВАНИЕ: Логируем полученный ответ ---
-                _logger.LogInfo($"<-- Received response from Gemini: \"{responseText}\"");
-
+                _chatLogger.LogInfo($"<-- MODEL: {responseText}");
                 _history.Add(new GeminiRequestContent { Role = "model", Parts = new[] { new Part { Text = responseText } } });
-
                 return responseText;
             }
             catch (Exception ex)
             {
-                _logger.LogError("Exception in SendMessageAsync", ex);
+                _chatLogger.LogError("Exception in SendMessageAsync", ex);
                 return "An unexpected error occurred.";
             }
         }
@@ -95,24 +72,21 @@ namespace GeminiChat.Gemini
         public void StartNewChat()
         {
             _history.Clear();
-            _logger.LogInfo("New chat session started.");
+            _chatLogger.LogInfo("--- NEW CHAT SESSION ---");
         }
 
         public void LoadHistory(IEnumerable<Core.ChatMessage> history)
         {
-            _history = history
-                .Where(m => !string.IsNullOrWhiteSpace(m.Content))
-                .Select(m => new GeminiRequestContent
-                {
-                    Role = m.Author == Core.Author.User ? "user" : "model",
-                    Parts = new[] { new Part { Text = m.Content } }
-                }).ToList();
+            _history = history.Where(m => !string.IsNullOrWhiteSpace(m.Content))
+                              .Select(m => new GeminiRequestContent { Role = m.Author == Core.Author.User ? "user" : "model", Parts = new[] { new Part { Text = m.Content } } })
+                              .ToList();
+            _chatLogger.LogInfo($"--- CONTINUING SESSION WITH {_history.Count} MESSAGES ---");
         }
     }
 
     #region Helper Classes for JSON Serialization
-    // Эти классы не менялись
 
+    // ИСПРАВЛЕНО: Все свойства теперь public
     internal class GeminiRequest
     {
         [JsonPropertyName("contents")]

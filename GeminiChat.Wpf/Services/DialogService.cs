@@ -17,19 +17,39 @@ namespace GeminiChat.Wpf.Services
 
         public void ShowSettingsDialog()
         {
-            // Мы получаем новый экземпляр ViewModel и Window каждый раз, когда открываем окно
             var settingsViewModel = _serviceProvider.GetRequiredService<SettingsViewModel>();
             var settingsWindow = new SettingsWindow(settingsViewModel)
             {
-                // Устанавливаем владельца, чтобы окно открылось по центру главного
                 Owner = Application.Current.MainWindow
             };
-
             settingsWindow.ShowDialog();
+        }
 
-            // После закрытия окна, можно обновить настройки в главном ViewModel
-            // Это более сложная тема (мессенджер или события), пока оставим так.
-            // Пользователь должен будет перезапустить приложение, чтобы увидеть новые шрифты.
+        public bool EnsureApiKeyIsSet()
+        {
+            var settingsManager = _serviceProvider.GetRequiredService<SettingsManager>();
+            var settings = settingsManager.LoadSettings();
+
+            while (string.IsNullOrEmpty(settings.ApiKey))
+            {
+                // Получаем новый экземпляр ViewModel из контейнера.
+                // Контейнер сам внедрит в него SettingsManager и ILogger.
+                var settingsViewModel = _serviceProvider.GetRequiredService<SettingsViewModel>();
+                var settingsWindow = new SettingsWindow(settingsViewModel);
+
+                var dialogResult = settingsWindow.ShowDialog();
+
+                if (dialogResult != true)
+                {
+                    // Пользователь нажал "Отмена" или закрыл окно
+                    return false;
+                }
+
+                settings = settingsManager.LoadSettings();
+            }
+
+            // Если мы вышли из цикла, значит ключ есть
+            return true;
         }
     }
 }
