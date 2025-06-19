@@ -2,6 +2,7 @@
 using GeminiChat.Wpf.ViewModels;
 using System;
 using System.Windows;
+using System.Windows.Threading; // <-- Важный using для DispatcherPriority
 
 namespace GeminiChat.Wpf
 {
@@ -10,37 +11,47 @@ namespace GeminiChat.Wpf
         public MainWindow()
         {
             InitializeComponent();
-            // Подписываемся на событие, когда окно полностью загружено
-            Loaded += MainWindow_Loaded;
+            // Мы больше не используем событие Loaded, чтобы избежать гонки состояний.
+            // Вместо этого мы подписываемся на изменение DataContext.
+            this.DataContextChanged += MainWindow_DataContextChanged;
         }
 
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private void MainWindow_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            // Убеждаемся, что DataContext - это наша MainViewModel
-            if (DataContext is MainViewModel viewModel)
+            // Отписываемся от старого ViewModel, если он был
+            if (e.OldValue is MainViewModel oldViewModel)
             {
-                // Подписываемся на событие из ViewModel
-                //viewModel.MessageAdded += OnMessageAdded;
+                oldViewModel.MessageAdded -= OnMessageAdded;
+            }
+
+            // Подписываемся на новый ViewModel
+            if (e.NewValue is MainViewModel newViewModel)
+            {
+                newViewModel.MessageAdded += OnMessageAdded;
             }
         }
 
         /// <summary>
         /// Этот метод будет вызываться каждый раз, когда ViewModel добавляет сообщение.
         /// </summary>
-        //private void OnMessageAdded()
-        //{
-        //    // Прокручиваем ScrollViewer в самый низ
-        //    MessagesScrollViewer.ScrollToEnd();
-        //}
+        private void OnMessageAdded()
+        {
+            // ИСПРАВЛЕНИЕ: Мы просим диспетчер выполнить прокрутку с низким приоритетом.
+            // Это гарантирует, что сначала завершится вся работа по отрисовке и компоновке,
+            // и только потом будет выполнена прокрутка.
+            MessagesScrollViewer.Dispatcher.BeginInvoke(
+                new Action(() => MessagesScrollViewer.ScrollToEnd()),
+                DispatcherPriority.ContextIdle);
+        }
 
         // Отписываемся от события при закрытии окна, чтобы избежать утечек памяти
-        //protected override void OnClosed(EventArgs e)
-        //{
-        //    if (DataContext is MainViewModel viewModel)
-        //    {
-        //        viewModel.MessageAdded -= OnMessageAdded;
-        //    }
-        //    base.OnClosed(e);
-        //}
+        protected override void OnClosed(EventArgs e)
+        {
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.MessageAdded -= OnMessageAdded;
+            }
+            base.OnClosed(e);
+        }
     }
 }

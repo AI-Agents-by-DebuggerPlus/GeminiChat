@@ -3,6 +3,7 @@ using GeminiChat.Core;
 using GeminiChat.Wpf.Commands;
 using GeminiChat.Wpf.Messaging;
 using GeminiChat.Wpf.Services;
+using Microsoft.Win32; // Для OpenFileDialog
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -11,6 +12,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Imaging; // Для BitmapImage
 
 namespace GeminiChat.Wpf.ViewModels
 {
@@ -24,22 +26,37 @@ namespace GeminiChat.Wpf.ViewModels
         private readonly SettingsManager? _settingsManager;
         private readonly ICommandInterpreter? _commandInterpreter;
 
-        // --- Поля и свойства ---
+        // --- Поля для свойств ---
         private string _currentMessage = "";
         private bool _isSending;
         private string _fontFamily = "Segoe UI";
         private double _fontSize = 15;
+
+        // --- НОВЫЕ ПОЛЯ ДЛЯ ПРИКРЕПЛЕНИЯ ИЗОБРАЖЕНИЯ ---
+        private BitmapImage? _attachedImagePreview;
+        private byte[]? _attachedImageData;
+        private string? _attachedImageMimeType;
+
+        // --- Свойства для привязки к UI ---
         public ObservableCollection<ChatMessage> Messages { get; }
-        public string CurrentMessage { get => _currentMessage; set => SetProperty(ref _currentMessage, value); }
-        public bool IsSending { get => _isSending; set => SetProperty(ref _isSending, value); }
+        public string CurrentMessage { get => _currentMessage; set { if (SetProperty(ref _currentMessage, value)) RaiseCanExecuteChanged(); } }
+        public bool IsSending { get => _isSending; set { if (SetProperty(ref _isSending, value)) RaiseCanExecuteChanged(); } }
         public string FontFamily { get => _fontFamily; set => SetProperty(ref _fontFamily, value); }
         public double FontSize { get => _fontSize; set => SetProperty(ref _fontSize, value); }
+
+        public BitmapImage? AttachedImagePreview
+        {
+            get => _attachedImagePreview;
+            set { if (SetProperty(ref _attachedImagePreview, value)) RaiseCanExecuteChanged(); }
+        }
 
         // --- Команды ---
         public ICommand SendMessageCommand { get; }
         public ICommand NewChatCommand { get; }
         public ICommand OpenSettingsCommand { get; }
         public ICommand SendSystemInstructionCommand { get; }
+        public ICommand AttachImageCommand { get; }
+        public ICommand RemoveImageCommand { get; }
 
         public event Action? MessageAdded;
 
@@ -51,6 +68,8 @@ namespace GeminiChat.Wpf.ViewModels
             NewChatCommand = new RelayCommand(_ => { });
             OpenSettingsCommand = new RelayCommand(_ => { });
             SendSystemInstructionCommand = new RelayCommand(_ => { });
+            AttachImageCommand = new RelayCommand(_ => { });
+            RemoveImageCommand = new RelayCommand(_ => { });
         }
 
         // Основной конструктор
@@ -65,41 +84,33 @@ namespace GeminiChat.Wpf.ViewModels
 
             Messages = new ObservableCollection<ChatMessage>();
             Messages.CollectionChanged += OnMessagesChanged;
-            SendMessageCommand = new RelayCommand(async _ => await SendMessageAsync(), _ => !string.IsNullOrWhiteSpace(CurrentMessage) && !IsSending);
+
+            SendMessageCommand = new RelayCommand(async _ => await SendMessageAsync(), _ => CanSendMessage());
             NewChatCommand = new RelayCommand(_ => NewChat());
             OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
             SendSystemInstructionCommand = new RelayCommand(_ => SendSystemInstruction());
+            AttachImageCommand = new RelayCommand(_ => AttachImage());
+            RemoveImageCommand = new RelayCommand(_ => RemoveImage());
 
             Messenger.Register<SettingsUpdatedMessage>(OnSettingsUpdated);
             LoadFontSettings();
             LoadHistory();
         }
 
-        private void SendSystemInstruction()
+        private void RaiseCanExecuteChanged()
         {
-            if (_chatService == null || _logger == null) return;
+            (SendMessageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
 
-            try
-            {
-                // Читаем инструкцию из файла
-                string instruction = File.ReadAllText("ExecutorSystemPrompt.txt");
-                _chatService.SetSystemInstruction(instruction);
-
-                var infoMessage = new ChatMessage(Author.System, "Инструкция для Executor отправлена. Теперь вы можете давать команды в произвольной форме.");
-                AddMessageToCollection(infoMessage);
-                _logger.LogInfo("[ViewModel] System instruction loaded from file and sent to ChatService.");
-            }
-            catch (Exception ex)
-            {
-                // Обрабатываем возможные ошибки (например, файл не найден)
-                _logger.LogError("Failed to read system instruction from file.", ex);
-                var errorMessage = new ChatMessage(Author.System, "Ошибка: не удалось загрузить системную инструкцию.");
-                AddMessageToCollection(errorMessage);
-            }
+        private bool CanSendMessage()
+        {
+            // Отправлять можно, если есть либо текст, либо картинка, и не идет отправка
+            return (!string.IsNullOrWhiteSpace(CurrentMessage) || _attachedImageData != null) && !IsSending;
         }
 
         private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e) => _chatHistoryManager?.SaveHistory(Messages);
         private void OnSettingsUpdated(SettingsUpdatedMessage message) => LoadFontSettings();
+
         private void LoadFontSettings()
         {
             if (_settingsManager == null) return;
@@ -107,6 +118,7 @@ namespace GeminiChat.Wpf.ViewModels
             FontFamily = settings.FontFamily;
             FontSize = settings.FontSize;
         }
+
         private void AddMessageToCollection(ChatMessage message)
         {
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
@@ -115,19 +127,37 @@ namespace GeminiChat.Wpf.ViewModels
                 MessageAdded?.Invoke();
             }));
         }
+
         private async Task SendMessageAsync()
         {
             if (_chatService == null) return;
+
             var userMessageContent = CurrentMessage;
+            var imageData = _attachedImageData;
+            var imageMimeType = _attachedImageMimeType;
+
             CurrentMessage = string.Empty;
-            var userMessage = new ChatMessage(Author.User, userMessageContent);
+            RemoveImage();
+
+            ChatMessage userMessage;
+            if (imageData != null && imageMimeType != null)
+            {
+                userMessage = new ChatMessage(Author.User, userMessageContent, imageData, imageMimeType);
+            }
+            else
+            {
+                userMessage = new ChatMessage(Author.User, userMessageContent);
+            }
+
             AddMessageToCollection(userMessage);
 
             IsSending = true;
             try
             {
-                var responseText = await Task.Run(() => _chatService.SendMessageAsync(userMessageContent));
+                var responseText = await Task.Run(() => _chatService.SendMessageAsync(userMessageContent, imageData, imageMimeType));
+
                 ProcessAndDisplayResponse(responseText);
+
                 if (_commandInterpreter != null)
                 {
                     await _commandInterpreter.InterpretAndExecuteAsync(responseText);
@@ -135,6 +165,7 @@ namespace GeminiChat.Wpf.ViewModels
             }
             finally { IsSending = false; }
         }
+
         private void ProcessAndDisplayResponse(string response)
         {
             var codeBlockPattern = @"(```[\s\S]*?```)";
@@ -148,6 +179,7 @@ namespace GeminiChat.Wpf.ViewModels
                 AddMessageToCollection(message);
             }
         }
+
         private void LoadHistory()
         {
             if (_chatService == null || _chatHistoryManager == null || _logger == null) return;
@@ -157,6 +189,7 @@ namespace GeminiChat.Wpf.ViewModels
             _chatService.LoadHistory(history);
             Application.Current.Dispatcher.BeginInvoke(new Action(() => { MessageAdded?.Invoke(); }), System.Windows.Threading.DispatcherPriority.ContextIdle);
         }
+
         private void NewChat()
         {
             if (_chatService == null || _logger == null) return;
@@ -164,6 +197,78 @@ namespace GeminiChat.Wpf.ViewModels
             Messages.Clear();
             _chatService.StartNewChat();
         }
+
         private void OpenSettings() => _dialogService?.ShowSettingsDialog();
+
+        private void SendSystemInstruction()
+        {
+            if (_chatService == null || _logger == null) return;
+            try
+            {
+                string instruction = File.ReadAllText("ExecutorSystemPrompt.txt");
+                _chatService.SetSystemInstruction(instruction);
+                var infoMessage = new ChatMessage(Author.System, "Инструкция для Executor отправлена.");
+                AddMessageToCollection(infoMessage);
+                _logger.LogInfo("[ViewModel] System instruction sent to ChatService.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Failed to read system instruction from file.", ex);
+                var errorMessage = new ChatMessage(Author.System, "Ошибка: не удалось загрузить инструкцию.");
+                AddMessageToCollection(errorMessage);
+            }
+        }
+
+        private void AttachImage()
+        {
+            var openFileDialog = new OpenFileDialog
+            {
+                Filter = "Images (*.png;*.jpeg;*.jpg;*.webp)|*.png;*.jpeg;*.jpg;*.webp",
+                Title = "Выберите изображение"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    _attachedImageData = File.ReadAllBytes(openFileDialog.FileName);
+                    _attachedImageMimeType = GetMimeType(openFileDialog.FileName);
+
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(openFileDialog.FileName);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    AttachedImagePreview = bitmap;
+
+                    _logger?.LogInfo($"Image attached: {openFileDialog.FileName}");
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError("Failed to attach image.", ex);
+                    MessageBox.Show("Не удалось прикрепить изображение.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void RemoveImage()
+        {
+            AttachedImagePreview = null;
+            _attachedImageData = null;
+            _attachedImageMimeType = null;
+        }
+
+        private string GetMimeType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            return extension switch
+            {
+                ".png" => "image/png",
+                ".jpg" => "image/jpeg",
+                ".jpeg" => "image/jpeg",
+                ".webp" => "image/webp",
+                _ => "application/octet-stream"
+            };
+        }
     }
 }

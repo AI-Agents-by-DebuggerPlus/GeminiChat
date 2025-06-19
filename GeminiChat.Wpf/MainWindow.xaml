@@ -15,44 +15,33 @@
         Background="#2D3235"
         FontFamily="{Binding FontFamily}"
         FontSize="{Binding FontSize}">
+
     <Window.Resources>
         <!-- Конвертеры -->
         <converters:AuthorToAlignmentConverter x:Key="AuthorToAlignmentConverter"/>
         <converters:AuthorToBackgroundConverter x:Key="AuthorToBackgroundConverter"/>
         <converters:TrimCodeBlockConverter x:Key="TrimCodeBlockConverter"/>
+        <!-- НОВЫЙ КОНВЕРТЕР для скрытия/показа элементов -->
+        <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
 
-        <!-- Стиль для inline-кода -->
-        <Style x:Key="InlineCodeStyle" TargetType="Run">
-            <Setter Property="FontFamily" Value="Consolas"/>
-            <Setter Property="Foreground" Value="#E0E0E0"/>
-            <Setter Property="Background" Value="#262626"/>
-        </Style>
-
-        <!-- Шаблон для обычного текста -->
+        <!-- Шаблоны DataTemplate... (без изменений) -->
         <DataTemplate x:Key="PlainTextTemplate" DataType="{x:Type core:ChatMessage}">
             <Grid Margin="5">
                 <Border HorizontalAlignment="{Binding Author, Converter={StaticResource AuthorToAlignmentConverter}}"
                         Background="{Binding Author, Converter={StaticResource AuthorToBackgroundConverter}}"
                         CornerRadius="10" MaxWidth="600" Padding="12">
-                    <TextBlock behaviors:InlineCodeBehavior.FormattedText="{Binding Content}" 
-                               TextWrapping="Wrap" 
-                               Foreground="WhiteSmoke"/>
+                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="WhiteSmoke"/>
                 </Border>
             </Grid>
         </DataTemplate>
-
-        <!-- Шаблон для кода -->
         <DataTemplate x:Key="CodeTemplate" DataType="{x:Type core:ChatMessage}">
             <Grid Margin="5">
                 <Border HorizontalAlignment="{Binding Author, Converter={StaticResource AuthorToAlignmentConverter}}"
-                        Background="#1E1E1E" 
-                        CornerRadius="10" MaxWidth="750"
-                        BorderBrush="DarkGreen" 
-                        BorderThickness="1">
+                        Background="#1E1E1E" CornerRadius="10" MaxWidth="750"
+                        BorderBrush="DarkGreen" BorderThickness="1">
                     <avalonedit:TextEditor
                         IsReadOnly="True" ShowLineNumbers="True" WordWrap="True"
-                        FontFamily="Consolas"
-                        FontSize="{Binding DataContext.FontSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                        FontFamily="Consolas" FontSize="{Binding DataContext.FontSize, RelativeSource={RelativeSource AncestorType=Window}}"
                         Background="Transparent" Foreground="#D4D4D4" 
                         SyntaxHighlighting="Bright C#" Padding="10"
                         behaviors:AvalonEditBehavior.BoundText="{Binding Content, Converter={StaticResource TrimCodeBlockConverter}, Mode=OneWay}"
@@ -61,7 +50,6 @@
             </Grid>
         </DataTemplate>
 
-        <!-- Селектор шаблонов -->
         <selectors:MessageTemplateSelector x:Key="MessageTemplateSelector"
                                            PlainTextTemplate="{StaticResource PlainTextTemplate}"
                                            CodeTemplate="{StaticResource CodeTemplate}"
@@ -75,47 +63,90 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Верхняя панель с кнопками -->
         <DockPanel Grid.Row="0" Margin="0,0,0,10">
-            <!-- Кнопки слева -->
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                 <Button Content="New Chat" Command="{Binding NewChatCommand}" Padding="10,5" Margin="0,0,10,0"/>
-
-                <!-- ДОБАВЛЕНА КНОПКА EXECUTOR -->
                 <Button Content="Executor" Command="{Binding SendSystemInstructionCommand}" Padding="10,5"/>
             </StackPanel>
-
-            <!-- Кнопка-шестеренка справа -->
             <Button DockPanel.Dock="Right" Command="{Binding OpenSettingsCommand}" 
-                    FontFamily="Segoe MDL2 Assets" 
-                    Content="&#xE713;" FontSize="20"
+                    FontFamily="Segoe MDL2 Assets" Content="&#xE713;" FontSize="20"
                     Padding="8" ToolTip="Settings" HorizontalAlignment="Right"/>
         </DockPanel>
 
-        <!-- Область чата -->
         <ScrollViewer x:Name="MessagesScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Messages}" 
                           ItemTemplateSelector="{StaticResource MessageTemplateSelector}"/>
         </ScrollViewer>
 
-        <!-- Панель ввода -->
+        <!-- ИЗМЕНЕННАЯ ПАНЕЛЬ ВВОДА -->
         <Grid Grid.Row="2" Margin="0,10,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBox Grid.Column="0" Name="UserInputTextBox"
-                     Text="{Binding CurrentMessage, UpdateSourceTrigger=PropertyChanged}"
-                     AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="150" VerticalScrollBarVisibility="Auto"
-                     Padding="10" BorderThickness="1" BorderBrush="#444" Background="#222" Foreground="WhiteSmoke">
-                <TextBox.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding SendMessageCommand}"/>
-                    <KeyBinding Key="Enter" Modifiers="Shift" Command="EditingCommands.EnterLineBreak" CommandTarget="{Binding ElementName=UserInputTextBox}"/>
-                </TextBox.InputBindings>
-            </TextBox>
-            <Button Grid.Column="1" Content="Send" 
-                    Command="{Binding SendMessageCommand}" 
-                    Padding="20,10" Margin="10,0,0,0"/>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- Для предпросмотра изображения -->
+                <RowDefinition Height="*"/>
+                <!-- Для поля ввода и кнопок -->
+            </Grid.RowDefinitions>
+
+            <!-- ОБЛАСТЬ ПРЕДПРОСМОТРА ИЗОБРАЖЕНИЯ -->
+            <Border Grid.Row="0"
+                    Margin="35,0,0,5"
+                    BorderBrush="Gray"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    HorizontalAlignment="Left"
+                    Visibility="{Binding AttachedImagePreview, Converter={StaticResource NullToVisibilityConverter}}">
+                <Grid>
+                    <Image Source="{Binding AttachedImagePreview}" MaxHeight="100" MaxWidth="200" Stretch="Uniform"/>
+                    <Button Command="{Binding RemoveImageCommand}"
+                            Content="&#xE711;"
+                            FontFamily="Segoe MDL2 Assets"
+                            Width="24" Height="24"
+                            FontSize="12"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,-12,-12,0"
+                            ToolTip="Remove Attachment">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Grid>
+                                    <Ellipse Fill="Gray"/>
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="White"/>
+                                </Grid>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Панель с полем ввода и кнопками -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Для кнопки-скрепки -->
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- КНОПКА-СКРЕПКА -->
+                <Button Grid.Column="0" 
+                        Command="{Binding AttachImageCommand}"
+                        FontFamily="Segoe MDL2 Assets" Content="&#xE724;"
+                        FontSize="20" Padding="8" Margin="0,0,5,0"
+                        VerticalAlignment="Bottom"/>
+
+                <TextBox Grid.Column="1" Name="UserInputTextBox"
+                         Text="{Binding CurrentMessage, UpdateSourceTrigger=PropertyChanged}"
+                         AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="150" VerticalScrollBarVisibility="Auto"
+                         Padding="10" BorderThickness="1" BorderBrush="#444" Background="#222" Foreground="WhiteSmoke">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding SendMessageCommand}"/>
+                        <KeyBinding Key="Enter" Modifiers="Shift" Command="EditingCommands.EnterLineBreak" CommandTarget="{Binding ElementName=UserInputTextBox}"/>
+                    </TextBox.InputBindings>
+                </TextBox>
+                <Button Grid.Column="2" Content="Send" 
+                        Command="{Binding SendMessageCommand}" 
+                        Padding="20,10" Margin="10,0,0,0"/>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

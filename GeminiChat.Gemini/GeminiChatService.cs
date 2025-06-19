@@ -22,39 +22,46 @@ namespace GeminiChat.Gemini
 
         public GeminiChatService(string apiKey, ILogger chatLogger)
         {
-            _apiKey = apiKey;
-            _chatLogger = chatLogger;
+            _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+            _chatLogger = chatLogger ?? throw new ArgumentNullException(nameof(chatLogger));
             _httpClient = new HttpClient { BaseAddress = new Uri("https://generativelanguage.googleapis.com/") };
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
-        // --- ВОЗВРАЩАЕМ НЕДОСТАЮЩИЙ МЕТОД ---
         public void SetSystemInstruction(string instruction)
         {
             _systemInstruction = instruction;
-            _chatLogger.LogInfo("[Service] System instruction has been set.");
         }
 
-        public async Task<string> SendMessageAsync(string message)
+        public async Task<string> SendMessageAsync(string message, byte[]? imageData = null, string? mimeType = null)
         {
             try
             {
-                // Логика добавления системной инструкции к сообщению
                 if (!string.IsNullOrEmpty(_systemInstruction))
                 {
                     message = $"{_systemInstruction}\n\nUser: {message}";
-                    _chatLogger.LogInfo("[Service] Prepending system instruction to the message.");
                     _systemInstruction = null;
                 }
 
                 _chatLogger.LogInfo($"--> USER: {message}");
+                if (imageData != null) _chatLogger.LogInfo($"--> ATTACHMENT: {mimeType}, {imageData.Length} bytes");
 
+                var parts = new List<Part>();
                 if (!string.IsNullOrWhiteSpace(message))
                 {
-                    _history.Add(new GeminiRequestContent { Role = "user", Parts = new[] { new Part { Text = message } } });
+                    parts.Add(new Part { Text = message });
+                }
+                if (imageData != null && mimeType != null)
+                {
+                    parts.Add(new Part { InlineData = new InlineData { MimeType = mimeType, Data = Convert.ToBase64String(imageData) } });
                 }
 
-                var validHistory = _history.Where(h => h.Parts != null && h.Parts.Any(p => !string.IsNullOrWhiteSpace(p.Text))).ToList();
+                if (parts.Any())
+                {
+                    _history.Add(new GeminiRequestContent { Role = "user", Parts = parts.ToArray() });
+                }
+
+                var validHistory = _history.Where(h => h.Parts != null && h.Parts.Any()).ToList();
                 if (!validHistory.Any()) return "Please provide a message.";
 
                 var requestPayload = new GeminiRequest { Contents = validHistory.ToArray() };
@@ -101,11 +108,29 @@ namespace GeminiChat.Gemini
 
         public void LoadHistory(IEnumerable<Core.ChatMessage> history)
         {
-            _history = history.Where(m => !string.IsNullOrWhiteSpace(m.Content))
-                              .Select(m => new GeminiRequestContent { Role = m.Author == Core.Author.User ? "user" : "model", Parts = new[] { new Part { Text = m.Content } } })
-                              .ToList();
+            _history.Clear();
+            foreach (var message in history)
+            {
+                var parts = new List<Part>();
+                if (!string.IsNullOrWhiteSpace(message.Content))
+                {
+                    parts.Add(new Part { Text = message.Content });
+                }
+                if (message.ImageData != null && message.ImageMimeType != null)
+                {
+                    parts.Add(new Part { InlineData = new InlineData { MimeType = message.ImageMimeType, Data = Convert.ToBase64String(message.ImageData) } });
+                }
+                if (parts.Any())
+                {
+                    _history.Add(new GeminiRequestContent
+                    {
+                        Role = message.Author == Core.Author.User ? "user" : "model",
+                        Parts = parts.ToArray()
+                    });
+                }
+            }
             if (history.Any())
-                _chatLogger.LogInfo($"--- CONTINUING SESSION WITH {_history.Count} MESSAGES ---");
+                _chatLogger.LogInfo($"--- CONTINUING SESSION WITH {history.Count()} MESSAGES ---");
         }
     }
 
@@ -121,7 +146,13 @@ namespace GeminiChat.Gemini
     }
     internal class Part
     {
-        public string Text { get; set; } = default!;
+        public string? Text { get; set; }
+        public InlineData? InlineData { get; set; }
+    }
+    internal class InlineData
+    {
+        public string MimeType { get; set; } = default!;
+        public string Data { get; set; } = default!;
     }
     internal class GeminiResponse
     {
