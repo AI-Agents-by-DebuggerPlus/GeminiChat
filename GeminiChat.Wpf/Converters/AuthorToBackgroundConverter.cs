@@ -9,15 +9,26 @@ namespace GeminiChat.Wpf.Converters
 {
     public class AuthorToBackgroundConverter : IValueConverter
     {
-        // Цвета можно вынести в ресурсы для удобства
+        // Определяем цвета для каждого типа автора
         private readonly SolidColorBrush _userBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#004D40")); // Темно-бирюзовый
         private readonly SolidColorBrush _modelBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#37474F")); // Темно-серый
+        private readonly SolidColorBrush _systemBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4A4A4A")); // Нейтральный серый
 
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (value is Author author)
             {
-                return author == Author.User ? _userBrush : _modelBrush;
+                switch (author)
+                {
+                    case Author.User:
+                        return _userBrush;
+                    case Author.Model:
+                        return _modelBrush;
+                    case Author.System:
+                        return _systemBrush; // Возвращаем новый цвет для системных сообщений
+                    default:
+                        return _modelBrush;
+                }
             }
             return _modelBrush;
         }

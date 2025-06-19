@@ -25,4 +25,10 @@
     <ProjectReference Include="..\GeminiChat.Logging\GeminiChat.Logging.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="ExecutorSystemPrompt.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

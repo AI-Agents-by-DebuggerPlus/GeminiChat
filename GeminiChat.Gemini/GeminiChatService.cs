@@ -18,6 +18,7 @@ namespace GeminiChat.Gemini
         private readonly string _apiKey;
         private readonly ILogger _chatLogger;
         private List<GeminiRequestContent> _history = new List<GeminiRequestContent>();
+        private string? _systemInstruction = null;
 
         public GeminiChatService(string apiKey, ILogger chatLogger)
         {
@@ -27,11 +28,27 @@ namespace GeminiChat.Gemini
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
+        // --- ВОЗВРАЩАЕМ НЕДОСТАЮЩИЙ МЕТОД ---
+        public void SetSystemInstruction(string instruction)
+        {
+            _systemInstruction = instruction;
+            _chatLogger.LogInfo("[Service] System instruction has been set.");
+        }
+
         public async Task<string> SendMessageAsync(string message)
         {
             try
             {
+                // Логика добавления системной инструкции к сообщению
+                if (!string.IsNullOrEmpty(_systemInstruction))
+                {
+                    message = $"{_systemInstruction}\n\nUser: {message}";
+                    _chatLogger.LogInfo("[Service] Prepending system instruction to the message.");
+                    _systemInstruction = null;
+                }
+
                 _chatLogger.LogInfo($"--> USER: {message}");
+
                 if (!string.IsNullOrWhiteSpace(message))
                 {
                     _history.Add(new GeminiRequestContent { Role = "user", Parts = new[] { new Part { Text = message } } });
@@ -41,7 +58,14 @@ namespace GeminiChat.Gemini
                 if (!validHistory.Any()) return "Please provide a message.";
 
                 var requestPayload = new GeminiRequest { Contents = validHistory.ToArray() };
-                var jsonPayload = JsonSerializer.Serialize(requestPayload);
+
+                var serializerOptions = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                };
+
+                var jsonPayload = JsonSerializer.Serialize(requestPayload, serializerOptions);
                 var httpContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
                 var requestUrl = $"/v1beta/models/gemini-1.5-flash-latest:generateContent?key={_apiKey}";
@@ -55,7 +79,7 @@ namespace GeminiChat.Gemini
                 }
 
                 var jsonResponse = await response.Content.ReadAsStringAsync();
-                var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(jsonResponse);
+                var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(jsonResponse, serializerOptions);
                 var responseText = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text ?? "No content received.";
 
                 _chatLogger.LogInfo($"<-- MODEL: {responseText}");
@@ -80,45 +104,37 @@ namespace GeminiChat.Gemini
             _history = history.Where(m => !string.IsNullOrWhiteSpace(m.Content))
                               .Select(m => new GeminiRequestContent { Role = m.Author == Core.Author.User ? "user" : "model", Parts = new[] { new Part { Text = m.Content } } })
                               .ToList();
-            _chatLogger.LogInfo($"--- CONTINUING SESSION WITH {_history.Count} MESSAGES ---");
+            if (history.Any())
+                _chatLogger.LogInfo($"--- CONTINUING SESSION WITH {_history.Count} MESSAGES ---");
         }
     }
 
-    #region Helper Classes for JSON Serialization
-
-    // ИСПРАВЛЕНО: Все свойства теперь public
+    #region Helper Classes
     internal class GeminiRequest
     {
-        [JsonPropertyName("contents")]
         public GeminiRequestContent[] Contents { get; set; } = default!;
     }
-
     internal class GeminiRequestContent
     {
-        [JsonPropertyName("role")]
         public string Role { get; set; } = default!;
-
-        [JsonPropertyName("parts")]
         public Part[] Parts { get; set; } = default!;
     }
-
     internal class Part
     {
-        [JsonPropertyName("text")]
         public string Text { get; set; } = default!;
     }
-
     internal class GeminiResponse
     {
-        [JsonPropertyName("candidates")]
         public Candidate[]? Candidates { get; set; }
+        public PromptFeedback? PromptFeedback { get; set; }
     }
-
     internal class Candidate
     {
-        [JsonPropertyName("content")]
         public GeminiRequestContent? Content { get; set; }
     }
-
+    internal class PromptFeedback
+    {
+        public string? BlockReason { get; set; }
+    }
     #endregion
 }

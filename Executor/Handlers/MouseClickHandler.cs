@@ -3,7 +3,7 @@ using Executor.Models;
 using Executor.Models.Mouse;
 using Executor.Native;
 using System;
-using System.Text.Json; // Важный using для JsonElement
+using System.Text.Json; // <-- Важный using для JsonElement
 using System.Threading.Tasks;
 
 namespace Executor.Handlers
@@ -45,13 +45,8 @@ namespace Executor.Handlers
         /// </summary>
         private Point GetCoordinates(object xObj, object yObj)
         {
-            double x, y;
-            double screenWidth = UserInput.GetSystemMetrics(UserInput.SM_CXSCREEN);
-            double screenHeight = UserInput.GetSystemMetrics(UserInput.SM_CYSCREEN);
-
-            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: Корректно обрабатываем все типы данных ---
-            x = ParseCoordinate(xObj, screenWidth, "center");
-            y = ParseCoordinate(yObj, screenHeight, "center");
+            double x = ParseCoordinate(xObj, UserInput.GetSystemMetrics(UserInput.SM_CXSCREEN));
+            double y = ParseCoordinate(yObj, UserInput.GetSystemMetrics(UserInput.SM_CYSCREEN));
 
             return new Point(x, y);
         }
@@ -59,19 +54,28 @@ namespace Executor.Handlers
         /// <summary>
         /// Универсальный парсер для одной координаты.
         /// </summary>
-        private double ParseCoordinate(object coordObj, double totalSize, string centerKeyword)
+        private double ParseCoordinate(object coordObj, double totalSize)
         {
-            // Случай 1: Это уже число (например, из JSON `{"x": 100}`)
-            if (coordObj is JsonElement elem && elem.ValueKind == JsonValueKind.Number)
+            // Наш объект всегда приходит как JsonElement
+            if (coordObj is not JsonElement element)
             {
-                return elem.GetDouble();
+                // Если это что-то другое, пытаемся преобразовать напрямую (запасной вариант)
+                return Convert.ToDouble(coordObj);
             }
 
-            // Случай 2: Это строка (например, из JSON `{"x": "center"}` или `{"x": "50%"}`)
-            if (coordObj is JsonElement strElem && strElem.ValueKind == JsonValueKind.String)
+            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: Проверяем тип данных внутри JsonElement ---
+
+            // Если внутри число, просто возвращаем его
+            if (element.ValueKind == JsonValueKind.Number)
             {
-                var strValue = strElem.GetString()?.ToLower().Trim();
-                if (strValue == centerKeyword)
+                return element.GetDouble();
+            }
+
+            // Если внутри строка, анализируем ее
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                var strValue = element.GetString()?.ToLower().Trim();
+                if (strValue == "center")
                 {
                     return totalSize / 2;
                 }
@@ -84,8 +88,8 @@ namespace Executor.Handlers
                 }
             }
 
-            // Случай 3: Если ничего не подошло, пытаемся преобразовать напрямую
-            return Convert.ToDouble(coordObj);
+            // Если мы дошли сюда, значит, формат координаты неизвестен
+            throw new ArgumentException($"Unsupported coordinate format: {coordObj}");
         }
     }
 }

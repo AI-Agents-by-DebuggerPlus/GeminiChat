@@ -6,6 +6,7 @@ using GeminiChat.Wpf.Services;
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
@@ -28,16 +29,18 @@ namespace GeminiChat.Wpf.ViewModels
         private bool _isSending;
         private string _fontFamily = "Segoe UI";
         private double _fontSize = 15;
-
         public ObservableCollection<ChatMessage> Messages { get; }
         public string CurrentMessage { get => _currentMessage; set => SetProperty(ref _currentMessage, value); }
         public bool IsSending { get => _isSending; set => SetProperty(ref _isSending, value); }
         public string FontFamily { get => _fontFamily; set => SetProperty(ref _fontFamily, value); }
         public double FontSize { get => _fontSize; set => SetProperty(ref _fontSize, value); }
 
+        // --- Команды ---
         public ICommand SendMessageCommand { get; }
         public ICommand NewChatCommand { get; }
         public ICommand OpenSettingsCommand { get; }
+        public ICommand SendSystemInstructionCommand { get; }
+
         public event Action? MessageAdded;
 
         // Конструктор для дизайнера
@@ -47,6 +50,7 @@ namespace GeminiChat.Wpf.ViewModels
             SendMessageCommand = new RelayCommand(_ => { }, _ => false);
             NewChatCommand = new RelayCommand(_ => { });
             OpenSettingsCommand = new RelayCommand(_ => { });
+            SendSystemInstructionCommand = new RelayCommand(_ => { });
         }
 
         // Основной конструктор
@@ -64,41 +68,34 @@ namespace GeminiChat.Wpf.ViewModels
             SendMessageCommand = new RelayCommand(async _ => await SendMessageAsync(), _ => !string.IsNullOrWhiteSpace(CurrentMessage) && !IsSending);
             NewChatCommand = new RelayCommand(_ => NewChat());
             OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
+            SendSystemInstructionCommand = new RelayCommand(_ => SendSystemInstruction());
+
             Messenger.Register<SettingsUpdatedMessage>(OnSettingsUpdated);
             LoadFontSettings();
             LoadHistory();
         }
 
-        private async Task SendMessageAsync()
+        private void SendSystemInstruction()
         {
-            if (_chatService == null) return;
+            if (_chatService == null || _logger == null) return;
 
-            var userMessageContent = CurrentMessage;
-            CurrentMessage = string.Empty;
-            var userMessage = new ChatMessage(Author.User, userMessageContent);
-            AddMessageToCollection(userMessage);
-
-            IsSending = true;
             try
             {
-                var responseText = await Task.Run(() => _chatService.SendMessageAsync(userMessageContent));
+                // Читаем инструкцию из файла
+                string instruction = File.ReadAllText("ExecutorSystemPrompt.txt");
+                _chatService.SetSystemInstruction(instruction);
 
-                ProcessAndDisplayResponse(responseText);
-
-                // --- ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ВЫЗОВА ИНТЕРПРЕТАТОРА ---
-                _logger?.LogInfo("[ViewModel] Preparing to interpret command...");
-                if (_commandInterpreter != null)
-                {
-                    _logger?.LogInfo("[ViewModel] CommandInterpreter is not null. Calling InterpretAndExecuteAsync...");
-                    await _commandInterpreter.InterpretAndExecuteAsync(responseText);
-                    _logger?.LogInfo("[ViewModel] InterpretAndExecuteAsync finished.");
-                }
-                else
-                {
-                    _logger?.LogWarning("[ViewModel] CommandInterpreter is NULL. Cannot execute command.");
-                }
+                var infoMessage = new ChatMessage(Author.System, "Инструкция для Executor отправлена. Теперь вы можете давать команды в произвольной форме.");
+                AddMessageToCollection(infoMessage);
+                _logger.LogInfo("[ViewModel] System instruction loaded from file and sent to ChatService.");
             }
-            finally { IsSending = false; }
+            catch (Exception ex)
+            {
+                // Обрабатываем возможные ошибки (например, файл не найден)
+                _logger.LogError("Failed to read system instruction from file.", ex);
+                var errorMessage = new ChatMessage(Author.System, "Ошибка: не удалось загрузить системную инструкцию.");
+                AddMessageToCollection(errorMessage);
+            }
         }
 
         private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e) => _chatHistoryManager?.SaveHistory(Messages);
@@ -117,6 +114,26 @@ namespace GeminiChat.Wpf.ViewModels
                 Messages.Add(message);
                 MessageAdded?.Invoke();
             }));
+        }
+        private async Task SendMessageAsync()
+        {
+            if (_chatService == null) return;
+            var userMessageContent = CurrentMessage;
+            CurrentMessage = string.Empty;
+            var userMessage = new ChatMessage(Author.User, userMessageContent);
+            AddMessageToCollection(userMessage);
+
+            IsSending = true;
+            try
+            {
+                var responseText = await Task.Run(() => _chatService.SendMessageAsync(userMessageContent));
+                ProcessAndDisplayResponse(responseText);
+                if (_commandInterpreter != null)
+                {
+                    await _commandInterpreter.InterpretAndExecuteAsync(responseText);
+                }
+            }
+            finally { IsSending = false; }
         }
         private void ProcessAndDisplayResponse(string response)
         {

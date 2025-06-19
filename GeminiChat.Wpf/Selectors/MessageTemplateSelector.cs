@@ -7,24 +7,35 @@ namespace GeminiChat.Wpf.Selectors
 {
     public class MessageTemplateSelector : DataTemplateSelector
     {
-        public DataTemplate PlainTextTemplate { get; set; }
-        public DataTemplate CodeTemplate { get; set; }
+        // Добавляем свойства для всех наших шаблонов
+        public DataTemplate? PlainTextTemplate { get; set; }
+        public DataTemplate? CodeTemplate { get; set; }
+        public DataTemplate? InstructionTemplate { get; set; }
 
-        public override DataTemplate SelectTemplate(object item, DependencyObject container)
+        public override DataTemplate? SelectTemplate(object item, DependencyObject container)
         {
-            // Проверяем, является ли объект сообщения ChatMessage
-            if (item is ChatMessage message)
+            if (item is ChatMessage message && !string.IsNullOrEmpty(message.Content))
             {
-                // ИСПРАВЛЕНО: Добавляем проверку, что содержимое сообщения не является null
-                if (message.Content != null && message.Content.Trim().StartsWith("```"))
+                var trimmedContent = message.Content.Trim();
+
+                // 1. Сначала проверяем на код
+                if (trimmedContent.StartsWith("```"))
                 {
-                    // Если это блок кода, возвращаем шаблон для кода
                     return CodeTemplate;
+                }
+
+                // 2. Затем проверяем на инструкцию/список
+                // Мы используем PlainTextTemplate и для инструкций, и для списков,
+                // так как форматирование `inline-кода` происходит внутри него.
+                // Если бы у нас был совершенно другой вид для инструкций, мы бы вернули InstructionTemplate.
+                // В вашем случае, этот блок можно даже упростить, но оставим для гибкости.
+                if (trimmedContent.StartsWith("*") || trimmedContent.StartsWith("-"))
+                {
+                    return PlainTextTemplate; // Используем тот же шаблон, что и для обычного текста
                 }
             }
 
-            // Во всех остальных случаях (включая сообщения с пустым содержимым)
-            // используем шаблон для обычного текста.
+            // 3. Во всех остальных случаях - обычный текст
             return PlainTextTemplate;
         }
     }
